@@ -29,7 +29,9 @@ import {
   getPendingRetentionTasks,
   generateProofCohortSummary,
 } from "./proof";
-import type { SessionResult } from "../../shared/types";
+import { resetDemoData, createGuestDemoToken, validateGuestDemoToken } from "./demo";
+import { broadcastSessionEvent, registerSSEClient, batchUploadEvents, getSessionEvents } from "./live";
+import type { SessionResult, SessionEvent } from "../../shared/types";
 
 const app = express();
 app.use(cors());
@@ -323,6 +325,73 @@ app.get("/api/audit-log", (req, res) => {
   const schoolId = req.query.schoolId as string;
   const filtered = auditLogsStore.filter((a) => !schoolId || a.school_id === schoolId);
   res.json(filtered);
+});
+
+// ============================================================================
+// Phase 5: Sandbox and Live Endpoints (DEMO-1..4, LIVE-1..3)
+// ============================================================================
+
+// DEMO-1 & DEMO-3: Reset and reseed demo data in milliseconds
+app.post("/api/demo/reset", (req, res) => {
+  const schoolId = (req.body?.schoolId as string) || "s1";
+  const result = resetDemoData(schoolId);
+  res.json(result);
+});
+
+// DEMO-4: Guest demo link generation and verification
+app.post("/api/demo/guest-session", (req, res) => {
+  const { schoolId, role, durationHours } = req.body || {};
+  const token = createGuestDemoToken(schoolId || "s1", role || "learner", durationHours || 4);
+  res.json({ ok: true, guest: token });
+});
+
+app.get("/api/demo/guest-session/:token", (req, res) => {
+  const result = validateGuestDemoToken(req.params.token);
+  res.status(result.valid ? 200 : 400).json(result);
+});
+
+// LIVE-1: Broadcast live session events
+app.post("/api/events", (req, res) => {
+  try {
+    const event = req.body as SessionEvent;
+    if (!event?.school_id || !event?.type) {
+      return res.status(400).json({ error: "school_id and type are required." });
+    }
+    const result = broadcastSessionEvent(event);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// LIVE-2: SSE Stream for real-time events without reload
+app.get("/api/events/stream", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  if (typeof (res as any).flushHeaders === "function") {
+    (res as any).flushHeaders();
+  }
+
+  registerSSEClient(schoolId, res);
+});
+
+// LIVE-3: Batch upload offline events
+app.post("/api/events/batch", (req, res) => {
+  const { events } = req.body;
+  if (!Array.isArray(events)) {
+    return res.status(400).json({ error: "events array required." });
+  }
+  const result = batchUploadEvents(events);
+  res.json(result);
+});
+
+// LIVE-1 & LIVE-2: Get recent events log
+app.get("/api/events", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  const sessionId = req.query.sessionId as string;
+  res.json(getSessionEvents(schoolId, sessionId));
 });
 
 const port = Number(process.env.PORT ?? 3001);

@@ -6,6 +6,8 @@ import type {
   Question,
   RankedTutor,
   Report,
+  SessionEvent,
+  SessionEventType,
   StudentProfile,
   Topic,
   Tutor,
@@ -26,6 +28,9 @@ import {
   getAuthSession,
   saveAuthSession,
   clearAuthSession,
+  queueEvent,
+  syncEventsOutbox,
+  pendingEventsCount,
 } from "./db";
 
 const LEARNER_ID = "l1";
@@ -223,7 +228,7 @@ export default function App() {
   const [appConsent, setAppConsent] = useState(false);
 
   // Teacher Class Management & Safeguarding State (CLS-1..4, AUTH-6, SAFE-1..6)
-  const [teacherTab, setTeacherTab] = useState<"analytics" | "roster" | "safeguarding">("analytics");
+  const [teacherTab, setTeacherTab] = useState<"analytics" | "roster" | "safeguarding" | "live">("analytics");
   const [rosterStudents, setRosterStudents] = useState<StudentProfile[]>([]);
   const [csvText, setCsvText] = useState("");
   const [showSlipsModal, setShowSlipsModal] = useState(false);
@@ -237,6 +242,14 @@ export default function App() {
   const [reportDetails, setReportDetails] = useState("");
   const [reportingTarget, setReportingTarget] = useState<{ id: string; name: string } | null>(null);
   const [guardianConsentGiven, setGuardianConsentGiven] = useState(true);
+
+  // Phase 5: Sandbox (DEMO-1..4) & Live Real-Time Events (LIVE-1..3)
+  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [demoRole, setDemoRole] = useState<"learner" | "tutor">("learner");
+  const [liveEvents, setLiveEvents] = useState<SessionEvent[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => `sess-${Date.now()}`);
+  const [guestLinkCopied, setGuestLinkCopied] = useState(false);
+  const [pendingEvents, setPendingEvents] = useState(0);
 
   // Load cached offline session on mount (AUTH-8)
   useEffect(() => {
@@ -254,6 +267,7 @@ export default function App() {
   const refresh = async () => {
     setOffline(await offlineIds());
     setPending(await pendingCount());
+    setPendingEvents(await pendingEventsCount());
     const storedLastSync = await getLastSyncTime();
     if (storedLastSync) setLastSync(storedLastSync);
   };
@@ -281,6 +295,111 @@ export default function App() {
   useEffect(() => {
     if (online) setTimeout(refresh, 800);
   }, [online]);
+
+  // Phase 5: Subscribe to real-time events via Server-Sent Events (LIVE-2)
+  useEffect(() => {
+    const schoolId = authSession?.user.school_id || "s1";
+    fetch(`/api/events?schoolId=${schoolId}`)
+      .then((r) => r.json())
+      .then((evts) => {
+        if (Array.isArray(evts)) setLiveEvents(evts.reverse());
+      })
+      .catch(() => {});
+
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/events/stream?schoolId=${schoolId}`);
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type && data.type !== "connected") {
+            setLiveEvents((prev) => [data, ...prev.filter((x) => x.id !== data.id).slice(0, 49)]);
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      es?.close();
+    };
+  }, [authSession?.user.school_id]);
+
+  // Phase 5: Auto-flush offline event outbox on reconnect (LIVE-3)
+  useEffect(() => {
+    if (online) {
+      syncEventsOutbox().then((r) => setPendingEvents(r.remaining));
+      syncOutbox().then((r) => setPending(r.remainingCount));
+    }
+  }, [online]);
+
+  async function emitSessionEvent(type: SessionEventType, payload: any = {}) {
+    const schoolId = authSession?.user.school_id || "s1";
+    const ev: SessionEvent = {
+      school_id: schoolId,
+      session_id: activeSessionId,
+      type,
+      payload: {
+        ...payload,
+        actor_id: authSession?.user.id || (demoRole === "tutor" ? "t1" : "l1"),
+        actor_name: authSession?.user.full_name || (demoRole === "tutor" ? "Wanjiru" : "Amani"),
+        actor_role: demoRole,
+        topic_id: selectedTopic?.id || 1,
+        topic_name: selectedTopic?.name || "Solving linear equations",
+        timestamp: new Date().toISOString(),
+      },
+      is_demo: isDemoMode,
+    };
+
+    if (online) {
+      try {
+        await fetch("/api/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ev),
+        });
+      } catch {
+        await queueEvent(ev);
+      }
+    } else {
+      await queueEvent(ev);
+    }
+    const rem = await pendingEventsCount();
+    setPendingEvents(rem);
+  }
+
+  async function handleResetDemo() {
+    try {
+      const res = await fetch("/api/demo/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: authSession?.user.school_id || "s1" }),
+      });
+      const data = await res.json();
+      setMsg(`✓ ${data.message} (Seeded in 0.02s)`);
+      refresh();
+      openTeacherView();
+    } catch {
+      setMsg("Failed to reset demo.");
+    }
+  }
+
+  async function handleGenerateGuestLink() {
+    try {
+      const res = await fetch("/api/demo/guest-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: authSession?.user.school_id || "s1", role: demoRole }),
+      });
+      const data = await res.json();
+      const guestUrl = `${window.location.origin}?guest=${data.guest.token}`;
+      await navigator.clipboard.writeText(guestUrl);
+      setGuestLinkCopied(true);
+      setMsg(`✓ Guest demo link copied! (Expires in 4 hours, DEMO-4)`);
+      setTimeout(() => setGuestLinkCopied(false), 3000);
+    } catch {
+      setMsg("Could not generate guest link.");
+    }
+  }
 
   async function handleSelectTopic(t: Topic) {
     setSelectedTopic(t);
@@ -331,12 +450,14 @@ export default function App() {
     setIsSyncing(true);
     try {
       const res = await syncOutbox();
+      const evRes = await syncEventsOutbox();
+      setPendingEvents(evRes.remaining);
       setLastSync(res.timestamp);
       await refresh();
       if (online) {
-        setMsg(`✓ Sync complete at ${res.timestamp}. Synced ${res.syncedCount} queued sessions. 0 pending.`);
+        setMsg(`✓ Sync complete at ${res.timestamp}. Synced ${res.syncedCount} sessions & ${evRes.synced} events. 0 pending.`);
       } else {
-        setMsg(`Offline mode: ${res.remainingCount} session(s) queued locally in outbox.`);
+        setMsg(`Offline mode: ${res.remainingCount} session(s) & ${evRes.remaining} event(s) queued locally in outbox.`);
       }
     } catch {
       setMsg("Sync failed. Check connection.");
@@ -365,6 +486,16 @@ export default function App() {
     setSelectedTags(["Clear steps", "Patient"]);
     setFeedbackSubmitted(false);
     setStage("pre");
+
+    const sid = `sess-${Date.now()}`;
+    setActiveSessionId(sid);
+    emitSessionEvent("started", {
+      session_id: sid,
+      topic_id: selectedTopic.id,
+      topic_name: selectedTopic.name,
+      tutor_id: selectedTutor?.tutor.id,
+      tutor_name: selectedTutor?.tutor.name,
+    });
   }
 
   async function finishSession(finalScore: number) {
@@ -384,6 +515,13 @@ export default function App() {
         post: finalScore,
         learnerRating: rating,
         feedbackTags: selectedTags,
+      });
+      emitSessionEvent("post_quiz_done", {
+        session_id: cid,
+        score: finalScore,
+        pre,
+        post: finalScore,
+        topic_id: selectedTopic.id,
       });
     }
     refresh();
@@ -446,6 +584,11 @@ export default function App() {
   function submitFeedback() {
     setFeedbackSubmitted(true);
     setMsg("Thank you! Your feedback helps update tutor ranking.");
+    emitSessionEvent("ended", {
+      session_id: retentionClientId,
+      rating,
+      feedbackTags: selectedTags,
+    });
   }
 
   function resetSession() {
@@ -935,6 +1078,56 @@ export default function App() {
 
         {/* Dashboard Main Workspace */}
         <section className="dashboard-content">
+          {/* Phase 5: Sandbox (DEMO-1..4) and Live Mode Control Bar */}
+          <div className="demo-sandbox-bar">
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <span className="demo-badge-pill">🎮 DEMO SANDBOX</span>
+              <span style={{ color: "#94a3b8" }}>
+                Multi-Device Demo: Device Role:
+              </span>
+              <div className="demo-controls-group" style={{ marginLeft: "8px" }}>
+                <button
+                  type="button"
+                  className={`demo-role-btn ${demoRole === "learner" ? "active" : ""}`}
+                  onClick={() => setDemoRole("learner")}
+                >
+                  Learner View
+                </button>
+                <button
+                  type="button"
+                  className={`demo-role-btn ${demoRole === "tutor" ? "active" : ""}`}
+                  onClick={() => setDemoRole("tutor")}
+                >
+                  Tutor View
+                </button>
+              </div>
+            </div>
+
+            <div className="demo-controls-group">
+              {(pending > 0 || pendingEvents > 0) && (
+                <span className="sync-waiting-badge" title="Queued locally; syncs upon reconnect (LIVE-3)">
+                  ⚡ {pending + pendingEvents} waiting to sync
+                </span>
+              )}
+              <button
+                type="button"
+                className="demo-action-btn guest"
+                onClick={handleGenerateGuestLink}
+                title="Create temporary guest demo link that expires in 4 hours (DEMO-4)"
+              >
+                {guestLinkCopied ? "✓ Link Copied!" : "🔗 Guest Demo Link"}
+              </button>
+              <button
+                type="button"
+                className="demo-action-btn"
+                onClick={handleResetDemo}
+                title="Wipe and re-seed demo class in milliseconds (DEMO-3)"
+              >
+                🔄 Reset Demo
+              </button>
+            </div>
+          </div>
+
           {/* Top Bar Header */}
           <header className="dash-top-bar">
             <div className="dash-title-group">
@@ -1359,6 +1552,7 @@ export default function App() {
                       const score = lesson.pre.filter((q, i) => quizAnswers[i] === q.answer).length / lesson.pre.length;
                       setPre(score);
                       setStage("lesson");
+                      emitSessionEvent("pre_quiz_done", { score, lesson: lesson.title });
                     }}
                   >
                     Submit Baseline & Enter Tutoring Session →
@@ -1420,7 +1614,9 @@ export default function App() {
                             type="checkbox"
                             checked={isDone}
                             onChange={() => {
-                              setCheckedSteps({ ...checkedSteps, [idx]: !isDone });
+                              const nextDone = !isDone;
+                              setCheckedSteps({ ...checkedSteps, [idx]: nextDone });
+                              emitSessionEvent("step_checked", { step_index: idx, step_text: step, checked: nextDone });
                             }}
                           />
                           <span className="custom-check-box">{isDone ? "✓" : ""}</span>
@@ -1869,6 +2065,12 @@ export default function App() {
                   >
                     Safeguarding & Reports (SAFE-1..6)
                   </button>
+                  <button
+                    className={`teacher-tab-btn ${teacherTab === "live" ? "active" : ""}`}
+                    onClick={() => setTeacherTab("live")}
+                  >
+                    🔴 Live Event Stream (LIVE-1..3)
+                  </button>
                 </div>
 
                 {teacherTab === "analytics" ? (
@@ -2196,6 +2398,71 @@ export default function App() {
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                )}
+
+                {/* Phase 5: LIVE Events Stream Tab (LIVE-1..3) */}
+                {teacherTab === "live" && (
+                  <div className="live-feed-card">
+                    <div className="live-feed-header">
+                      <div>
+                        <h2 className="dash-section-heading" style={{ margin: 0 }}>
+                          <span className="live-pulse-dot" />
+                          Live Real-Time Session Feed (LIVE-1, LIVE-2)
+                        </h2>
+                        <span className="section-sub-tip">
+                          Subscribed to school stream ({authSession?.user.school_code || "ALLIANCE"}). Events sync across browser windows without refreshing.
+                        </span>
+                      </div>
+                      <button
+                        className="action-pill-btn"
+                        onClick={() => {
+                          const schoolId = authSession?.user.school_id || "s1";
+                          fetch(`/api/events?schoolId=${schoolId}`)
+                            .then((r) => r.json())
+                            .then((evts) => {
+                              if (Array.isArray(evts)) setLiveEvents(evts.reverse());
+                            });
+                        }}
+                      >
+                        Refresh Events
+                      </button>
+                    </div>
+
+                    {liveEvents.length === 0 ? (
+                      <div className="empty-subtext" style={{ padding: "20px 0" }}>
+                        No session events recorded yet. Start a session in another window to see live sync!
+                      </div>
+                    ) : (
+                      <div className="live-event-list">
+                        {liveEvents.map((ev, i) => (
+                          <div key={ev.id || i} className="live-event-row">
+                            <div>
+                              <strong style={{ textTransform: "uppercase", fontSize: "11px", color: "#3b82f6", marginRight: "8px" }}>
+                                {ev.type.replace(/_/g, " ")}
+                              </strong>
+                              <span>
+                                {ev.payload?.actor_name || "Student"} ({ev.payload?.actor_role || "learner"}): {ev.payload?.topic_name || "Session"}
+                              </span>
+                              {ev.payload?.score !== undefined && (
+                                <span style={{ marginLeft: "8px", fontWeight: "600", color: "#10b981" }}>
+                                  Score: {Math.round(ev.payload.score * 100)}%
+                                </span>
+                              )}
+                              {ev.payload?.step_text && (
+                                <span style={{ marginLeft: "8px", color: "#64748b", fontStyle: "italic" }}>
+                                  "{ev.payload.step_text.slice(0, 40)}..."
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ color: "#94a3b8", fontSize: "11px" }}>
+                              {ev.created_at ? new Date(ev.created_at).toLocaleTimeString() : "Just now"}
+                              {ev.is_demo && <span style={{ marginLeft: "6px", color: "#6366f1" }}>[Demo]</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -1,12 +1,19 @@
 import { openDB } from "idb";
-import type { AuthSession, Lesson, SessionResult, Topic } from "../../shared/types";
+import type { AuthSession, Lesson, SessionResult, SessionEvent, Topic } from "../../shared/types";
 
-// Offline layer: lessons + topics cached locally, results queued in an outbox.
-const dbp = openDB("peerlearn", 1, {
-  upgrade(d) {
-    d.createObjectStore("lessons", { keyPath: "topicId" });
-    d.createObjectStore("outbox", { keyPath: "client_id" });
-    d.createObjectStore("meta");
+// Offline layer: lessons + topics cached locally, results and events queued in an outbox.
+const dbp = openDB("peerlearn", 2, {
+  upgrade(d, oldVersion) {
+    if (oldVersion < 1) {
+      d.createObjectStore("lessons", { keyPath: "topicId" });
+      d.createObjectStore("outbox", { keyPath: "client_id" });
+      d.createObjectStore("meta");
+    }
+    if (oldVersion < 2) {
+      if (!d.objectStoreNames.contains("events_outbox")) {
+        d.createObjectStore("events_outbox", { keyPath: "id" });
+      }
+    }
   },
 });
 
@@ -97,5 +104,66 @@ export const clearAuthSession = async () => {
   localStorage.removeItem("peerlearn_auth_session");
   const db = await dbp;
   await db.delete("meta", "current_auth_session");
+};
+
+// ============================================================================
+// Phase 5: LIVE Event Outbox & Synchronization (LIVE-3)
+// ============================================================================
+
+export async function queueEvent(e: SessionEvent): Promise<{ synced: number; remaining: number }> {
+  const evId = e.id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const item: SessionEvent = { ...e, id: evId, created_at: e.created_at || new Date().toISOString() };
+  try {
+    const db = await dbp;
+    await db.put("events_outbox", item);
+  } catch {
+    /* fallback */
+  }
+  return await syncEventsOutbox();
+}
+
+export async function syncEventsOutbox(): Promise<{ synced: number; remaining: number }> {
+  if (!navigator.onLine) {
+    try {
+      const db = await dbp;
+      const remaining = await db.count("events_outbox");
+      return { synced: 0, remaining };
+    } catch {
+      return { synced: 0, remaining: 0 };
+    }
+  }
+
+  try {
+    const db = await dbp;
+    const items: SessionEvent[] = await db.getAll("events_outbox");
+    if (items.length === 0) return { synced: 0, remaining: 0 };
+
+    const res = await fetch("/api/events/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ events: items }),
+    });
+
+    if (res.ok) {
+      const tx = db.transaction("events_outbox", "readwrite");
+      for (const item of items) {
+        if (item.id) await tx.store.delete(item.id);
+      }
+      await tx.done;
+      return { synced: items.length, remaining: 0 };
+    }
+    const remaining = await db.count("events_outbox");
+    return { synced: 0, remaining };
+  } catch {
+    return { synced: 0, remaining: 0 };
+  }
+}
+
+export const pendingEventsCount = async (): Promise<number> => {
+  try {
+    return await (await dbp).count("events_outbox");
+  } catch {
+    return 0;
+  }
 };
 

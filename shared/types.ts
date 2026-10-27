@@ -42,6 +42,8 @@ export interface StudentProfile {
   is_demo?: boolean;
   guardian_consent_at?: string;
   setup_code?: string; // only populated during import/reset sheets
+  pin_hash?: string;
+  created_at?: string;
 }
 
 export interface AuthSession {
@@ -167,6 +169,7 @@ export interface SessionResult {
   retention_score?: number; // 0..1 (PROOF-3)
   retention_at?: string;
   is_comparison_group?: boolean; // (PROOF-5)
+  is_demo?: boolean; // (R5, DEMO-1)
   learnerRating?: number; // 1..5
   tutorRating?: number;   // 1..5
   feedbackTags?: string[];
@@ -204,3 +207,52 @@ export interface ProofCohortSummary {
 }
 
 export interface RankedTutor { tutor: Tutor; score: number; breakdown?: MatchFactor[] }
+
+// ============================================================================
+// Phase 5: Sandbox and Live (DEMO-1..4, LIVE-1..3)
+// ============================================================================
+
+export type SessionEventType =
+  | "started"
+  | "pre_quiz_done"
+  | "step_checked"
+  | "post_quiz_done"
+  | "ended";
+
+export interface SessionEvent {
+  id?: string | number;
+  school_id: string;
+  session_id: string; // client_id or session uuid
+  type: SessionEventType;
+  payload: {
+    actor_id?: string;
+    actor_name?: string;
+    actor_role?: "learner" | "tutor" | "teacher";
+    topic_id?: number;
+    topic_name?: string;
+    score?: number;
+    step_index?: number;
+    step_text?: string;
+    rating?: number;
+    timestamp?: string;
+    [key: string]: any;
+  };
+  created_at?: string;
+  is_demo?: boolean;
+}
+
+export interface GuestDemoToken {
+  token: string;
+  school_id: string;
+  role: "learner" | "tutor" | "teacher";
+  expires_at: string;
+}
+
+export interface DemoResetResult {
+  ok: boolean;
+  message: string;
+  timestamp: string;
+  seeded_students: number;
+  seeded_tutors: number;
+  seeded_sessions: number;
+}
