@@ -89,8 +89,45 @@ export interface Person {
 
 export interface Tutor extends Person {
   verifiedScore: Record<number, number>; // topicId -> 0..1
+  teacherApproved?: Record<number, boolean>; // topicId -> boolean (SAFE-1)
+  isSuspended?: boolean; // tutor suspension (SAFE-2)
   activeMatches: number;
   avgGain: number; // average (post - pre), 0..1, learned from past sessions
+}
+
+export type ReportStatus = 'open' | 'investigating' | 'resolved';
+
+export interface Report {
+  id: string;
+  school_id: string;
+  reporter_id: string;
+  reporter_name?: string;
+  match_id?: string;
+  session_id?: string;
+  target_id?: string;
+  target_name?: string;
+  reason: string;
+  details?: string;
+  status: ReportStatus;
+  created_at: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  school_id: string;
+  actor_id: string;
+  action: string;
+  detail: any;
+  created_at: string;
+}
+
+export interface GuardianConsent {
+  student_id: string;
+  school_id: string;
+  consent_given: boolean;
+  guardian_name?: string;
+  guardian_phone?: string;
+  consented_at: string;
 }
 
 export interface Topic { id: number; subject: string; name: string; grade: number }

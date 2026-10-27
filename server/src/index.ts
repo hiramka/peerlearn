@@ -13,6 +13,16 @@ import {
   approveSchoolApplication,
   applicationsStore,
 } from "./auth";
+import {
+  approveTutorTopic,
+  setTutorSuspension,
+  submitReport,
+  getReportsBySchool,
+  resolveReport,
+  recordGuardianConsent,
+  checkGuardianConsent,
+  auditLogsStore,
+} from "./safeguarding";
 import type { SessionResult } from "../../shared/types";
 
 const app = express();
@@ -167,6 +177,108 @@ app.post("/api/schools/approve", (req, res) => {
   const { applicationId } = req.body;
   if (!applicationId) return res.status(400).json({ error: "applicationId is required." });
   res.json(approveSchoolApplication(applicationId));
+});
+
+// ============================================================================
+// Phase 3: Safeguarding Endpoints (SAFE-1 to SAFE-6)
+// ============================================================================
+
+// Tutors list for Teacher Safeguarding & Approval view (SAFE-1, SAFE-2, SAFE-3)
+app.get("/api/tutors", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  // Filter by school, exclude private contacts (SAFE-3, R4)
+  const schoolTutors = tutors
+    .filter((t) => !schoolId || t.schoolId === schoolId)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      grade: t.grade,
+      schoolId: t.schoolId,
+      language: t.language,
+      verifiedScore: t.verifiedScore,
+      teacherApproved: t.teacherApproved || {},
+      isSuspended: !!t.isSuspended,
+      activeMatches: t.activeMatches,
+      avgGain: t.avgGain,
+    }));
+  res.json(schoolTutors);
+});
+
+// SAFE-1: Approve or Revoke Tutor for a specific topic
+app.post("/api/tutors/approve", (req, res) => {
+  const { actorId, schoolId, tutorId, topicId, approved } = req.body;
+  if (!schoolId || !tutorId || topicId === undefined) {
+    return res.status(400).json({ error: "schoolId, tutorId, and topicId are required." });
+  }
+  const result = approveTutorTopic(actorId || "teacher1", schoolId, tutorId, Number(topicId), approved !== false);
+  res.json(result);
+});
+
+// SAFE-2: Suspend or Reinstate Tutor
+app.post("/api/tutors/suspend", (req, res) => {
+  const { actorId, schoolId, tutorId, suspended, reason } = req.body;
+  if (!schoolId || !tutorId) {
+    return res.status(400).json({ error: "schoolId and tutorId are required." });
+  }
+  const result = setTutorSuspension(actorId || "teacher1", schoolId, tutorId, suspended !== false, reason);
+  res.json(result);
+});
+
+// SAFE-4: Submit Problem Report
+app.post("/api/reports", (req, res) => {
+  const { school_id, reporter_id, reporter_name, match_id, session_id, target_id, target_name, reason, details } = req.body;
+  if (!school_id || !reporter_id || !reason) {
+    return res.status(400).json({ error: "school_id, reporter_id, and reason are required." });
+  }
+  const report = submitReport({
+    school_id,
+    reporter_id,
+    reporter_name,
+    match_id,
+    session_id,
+    target_id,
+    target_name,
+    reason,
+    details,
+  });
+  res.status(201).json({ ok: true, report });
+});
+
+// SAFE-4: Get Reports for a School (School Admin / Teacher view)
+app.get("/api/reports", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  const status = req.query.status as any;
+  res.json(getReportsBySchool(schoolId, status));
+});
+
+// SAFE-4: Resolve Report
+app.post("/api/reports/resolve", (req, res) => {
+  const { actorId, schoolId, reportId, resolutionNotes } = req.body;
+  if (!reportId) return res.status(400).json({ error: "reportId is required." });
+  const result = resolveReport(actorId || "teacher1", schoolId || "s1", reportId, resolutionNotes);
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+// SAFE-5: Record & Check Guardian Consent
+app.post("/api/guardian-consent", (req, res) => {
+  const { schoolId, studentId, guardianName, guardianPhone } = req.body;
+  if (!schoolId || !studentId) {
+    return res.status(400).json({ error: "schoolId and studentId are required." });
+  }
+  const consent = recordGuardianConsent(schoolId, studentId, guardianName, guardianPhone);
+  res.json({ ok: true, consent });
+});
+
+app.get("/api/guardian-consent/:studentId", (req, res) => {
+  const consented = checkGuardianConsent(req.params.studentId);
+  res.json({ studentId: req.params.studentId, consent_given: consented });
+});
+
+// SAFE-6: Audit Log
+app.get("/api/audit-log", (req, res) => {
+  const schoolId = req.query.schoolId as string;
+  const filtered = auditLogsStore.filter((a) => !schoolId || a.school_id === schoolId);
+  res.json(filtered);
 });
 
 const port = Number(process.env.PORT ?? 3001);

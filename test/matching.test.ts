@@ -20,6 +20,7 @@ describe("MATCH: Explainable Peer-Tutoring Matchmaker", () => {
     language: "en",
     availability: { mon: ["16:00-17:00"], wed: ["16:00-17:00"] },
     verifiedScore: { 1: 0.95 },
+    teacherApproved: { 1: true },
     activeMatches: 1,
     avgGain: 0.3,
   };

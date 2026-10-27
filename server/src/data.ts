@@ -14,10 +14,12 @@ export const learners: Person[] = [
 ];
 
 export const tutors: Tutor[] = [
-  { id: "t1", name: "Wanjiru", grade: 3, schoolId: "s1", language: "en", availability: slots, verifiedScore: { 1: 0.95, 2: 0.7 }, activeMatches: 1, avgGain: 0.3 },
-  { id: "t2", name: "Brian", grade: 4, schoolId: "s1", language: "en", availability: { mon: ["16:00-17:00"] }, verifiedScore: { 1: 0.85, 2: 0.9 }, activeMatches: 3, avgGain: 0.2 },
-  { id: "t3", name: "Achieng", grade: 3, schoolId: "s2", language: "sw", availability: { wed: ["16:00-17:00"] }, verifiedScore: { 1: 0.9, 2: 0.88 }, activeMatches: 0, avgGain: 0.1 },
-  { id: "t4", name: "Kevin", grade: 1, schoolId: "s1", language: "en", availability: slots, verifiedScore: { 1: 0.99 }, activeMatches: 0, avgGain: 0 }, // filtered out: lower grade
+  { id: "t1", name: "Wanjiru", grade: 3, schoolId: "s1", language: "en", availability: slots, verifiedScore: { 1: 0.95, 2: 0.7 }, teacherApproved: { 1: true, 2: false }, activeMatches: 1, avgGain: 0.3 },
+  { id: "t2", name: "Brian", grade: 4, schoolId: "s1", language: "en", availability: { mon: ["16:00-17:00"] }, verifiedScore: { 1: 0.85, 2: 0.9 }, teacherApproved: { 1: true, 2: true }, activeMatches: 3, avgGain: 0.2 },
+  { id: "t3", name: "Achieng", grade: 3, schoolId: "s2", language: "sw", availability: { wed: ["16:00-17:00"] }, verifiedScore: { 1: 0.9, 2: 0.88 }, teacherApproved: { 1: true, 2: true }, activeMatches: 0, avgGain: 0.1 },
+  { id: "t4", name: "Kevin", grade: 1, schoolId: "s1", language: "en", availability: slots, verifiedScore: { 1: 0.99 }, teacherApproved: { 1: true }, activeMatches: 0, avgGain: 0 }, // filtered out: lower grade
+  { id: "t5", name: "Daniel (Unapproved)", grade: 3, schoolId: "s1", language: "en", availability: slots, verifiedScore: { 1: 0.92 }, teacherApproved: { 1: false }, activeMatches: 0, avgGain: 0 }, // SAFE-1: unapproved
+  { id: "t6", name: "Grace (Suspended)", grade: 4, schoolId: "s1", language: "en", availability: slots, verifiedScore: { 1: 0.88 }, teacherApproved: { 1: true }, isSuspended: true, activeMatches: 0, avgGain: 0 }, // SAFE-2: suspended
 ];
 
 export const lessons: Lesson[] = [

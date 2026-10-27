@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import type { AuthSession, Lesson, Question, RankedTutor, StudentProfile, Topic } from "../../shared/types";
+import type { AuthSession, Lesson, Question, RankedTutor, Report, StudentProfile, Topic, Tutor } from "../../shared/types";
 import {
   cacheTopics,
   cachedTopics,
@@ -207,12 +207,21 @@ export default function App() {
   const [appStudentCount, setAppStudentCount] = useState(120);
   const [appConsent, setAppConsent] = useState(false);
 
-  // Teacher Class Management State (CLS-1..4, AUTH-6)
-  const [teacherTab, setTeacherTab] = useState<"analytics" | "roster">("analytics");
+  // Teacher Class Management & Safeguarding State (CLS-1..4, AUTH-6, SAFE-1..6)
+  const [teacherTab, setTeacherTab] = useState<"analytics" | "roster" | "safeguarding">("analytics");
   const [rosterStudents, setRosterStudents] = useState<StudentProfile[]>([]);
   const [csvText, setCsvText] = useState("");
   const [showSlipsModal, setShowSlipsModal] = useState(false);
   const [resetPinResult, setResetPinResult] = useState<{ regNumber: string; setupCode: string } | null>(null);
+
+  // Phase 3: Safeguarding & Reports State (SAFE-1..6)
+  const [allTutorsList, setAllTutorsList] = useState<Tutor[]>([]);
+  const [safeguardingReports, setSafeguardingReports] = useState<Report[]>([]);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState("Inappropriate behavior");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportingTarget, setReportingTarget] = useState<{ id: string; name: string } | null>(null);
+  const [guardianConsentGiven, setGuardianConsentGiven] = useState(true);
 
   // Load cached offline session on mount (AUTH-8)
   useEffect(() => {
@@ -387,6 +396,7 @@ export default function App() {
       }
     }
     loadRoster();
+    loadSafeguardingData();
   }
 
   async function handleStudentLogin(e: React.FormEvent) {
@@ -580,6 +590,128 @@ export default function App() {
       setMsg("Failed to reset student PIN.");
     }
   }
+
+  // Phase 3: Safeguarding Handlers (SAFE-1 to SAFE-6)
+  async function loadSafeguardingData(schoolId: string = "s1") {
+    try {
+      const [tutRes, repRes] = await Promise.all([
+        fetch(`/api/tutors?schoolId=${schoolId}`),
+        fetch(`/api/reports?schoolId=${schoolId}`),
+      ]);
+      if (tutRes.ok) setAllTutorsList(await tutRes.json());
+      if (repRes.ok) setSafeguardingReports(await repRes.json());
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handleToggleTutorApproval(tutorId: string, topicId: number, currentlyApproved: boolean) {
+    try {
+      const res = await fetch("/api/tutors/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: authSession?.user.school_id || "s1",
+          actorId: authSession?.user.id || "teacher1",
+          tutorId,
+          topicId,
+          approved: !currentlyApproved,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAllTutorsList((prev) =>
+          prev.map((t) =>
+            t.id === tutorId
+              ? { ...t, teacherApproved: { ...(t.teacherApproved || {}), [topicId]: !currentlyApproved } }
+              : t
+          )
+        );
+        setMsg(`✓ Updated tutor approval status for Topic ${topicId}.`);
+        if (selectedTopic) handleSelectTopic(selectedTopic);
+      }
+    } catch {
+      setMsg("Failed to update tutor approval.");
+    }
+  }
+
+  async function handleToggleTutorSuspension(tutorId: string, currentlySuspended: boolean) {
+    try {
+      const res = await fetch("/api/tutors/suspend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: authSession?.user.school_id || "s1",
+          actorId: authSession?.user.id || "teacher1",
+          tutorId,
+          suspended: !currentlySuspended,
+          reason: !currentlySuspended ? "Teacher suspension review" : "Reinstated by teacher",
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAllTutorsList((prev) =>
+          prev.map((t) => (t.id === tutorId ? { ...t, isSuspended: !currentlySuspended } : t))
+        );
+        setMsg(`✓ Tutor ${!currentlySuspended ? "suspended from all matching" : "reinstated"}.`);
+        if (selectedTopic) handleSelectTopic(selectedTopic);
+      }
+    } catch {
+      setMsg("Failed to update tutor suspension.");
+    }
+  }
+
+  async function handleSubmitReport(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          school_id: authSession?.user.school_id || "s1",
+          reporter_id: authSession?.user.id || LEARNER_ID,
+          reporter_name: authSession?.user.full_name || "Amani R.",
+          target_id: reportingTarget?.id,
+          target_name: reportingTarget?.name,
+          reason: reportReason,
+          details: reportDetails,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setShowReportModal(false);
+        setReportDetails("");
+        setMsg("✓ Your confidential report has been submitted to your school administration.");
+      }
+    } catch {
+      setMsg("Failed to submit report. Please try again.");
+    }
+  }
+
+  async function handleResolveReport(reportId: string) {
+    try {
+      const res = await fetch("/api/reports/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: authSession?.user.school_id || "s1",
+          actorId: authSession?.user.id || "teacher1",
+          reportId,
+          resolutionNotes: "Reviewed and resolved by teacher/admin.",
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSafeguardingReports((prev) =>
+          prev.map((r) => (r.id === reportId ? { ...r, status: "resolved" } : r))
+        );
+        setMsg("✓ Report marked as resolved.");
+      }
+    } catch {
+      setMsg("Failed to resolve report.");
+    }
+  }
+
 
   // Tutor Verification Submission
   async function submitVerification() {
@@ -958,6 +1090,19 @@ export default function App() {
                       >
                         Start Session
                       </button>
+                      <button
+                        className="btn-small-reset"
+                        style={{ marginTop: "8px", color: "#64748b", border: "none", background: "transparent", cursor: "pointer", fontSize: "11px" }}
+                        onClick={() => {
+                          setReportingTarget({
+                            id: selectedTutor?.tutor.id || "t1",
+                            name: selectedTutor?.tutor.name || "Peer Tutor",
+                          });
+                          setShowReportModal(true);
+                        }}
+                      >
+                        🚩 Report a Problem (SAFE-4)
+                      </button>
                     </div>
 
                     {/* Schedule Time Slots */}
@@ -1166,8 +1311,24 @@ export default function App() {
                     <span className="lesson-rev-badge">Working with Prof. {selectedTutor?.tutor.name}</span>
                   </div>
 
-                  {/* Active In-Session Countdown Timer */}
-                  <SessionTimer initialMinutes={20} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                      className="btn-small-reset"
+                      style={{ color: "#ef4444", borderColor: "#fca5a5", fontSize: "12px", padding: "6px 12px" }}
+                      onClick={() => {
+                        setReportingTarget({
+                          id: selectedTutor?.tutor.id || "t1",
+                          name: selectedTutor?.tutor.name || "Peer Tutor",
+                        });
+                        setShowReportModal(true);
+                      }}
+                      title="Confidential incident report to school administration (SAFE-4)"
+                    >
+                      🚩 Report Problem
+                    </button>
+                    {/* Active In-Session Countdown Timer */}
+                    <SessionTimer initialMinutes={20} />
+                  </div>
                 </div>
 
                 {/* Interactive Tutor Guiding Checklist */}
@@ -1495,6 +1656,15 @@ export default function App() {
                   >
                     Class Roster & Setup Slips (CLS-1..4)
                   </button>
+                  <button
+                    className={`teacher-tab-btn ${teacherTab === "safeguarding" ? "active" : ""}`}
+                    onClick={() => {
+                      setTeacherTab("safeguarding");
+                      loadSafeguardingData(authSession?.user.school_id || "s1");
+                    }}
+                  >
+                    Safeguarding & Reports (SAFE-1..6)
+                  </button>
                 </div>
 
                 {teacherTab === "analytics" ? (
@@ -1548,7 +1718,7 @@ export default function App() {
                       })}
                     </div>
                   </>
-                ) : (
+                ) : teacherTab === "roster" ? (
                   <div className="class-mgmt-container">
                     <div className="class-actions-bar">
                       <div>
@@ -1628,6 +1798,151 @@ export default function App() {
                               </td>
                             </tr>
                           ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="class-mgmt-container">
+                    <div className="class-actions-bar">
+                      <div>
+                        <h2 className="dash-section-heading">Tutor Safeguarding & Approvals (SAFE-1, SAFE-2)</h2>
+                        <span className="section-sub-tip">
+                          Tutors require $\ge 80\%$ mastery AND explicit teacher approval per topic before appearing in matches.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tutors Table */}
+                    <div className="roster-table-wrapper" style={{ marginBottom: "24px" }}>
+                      <table className="roster-table">
+                        <thead>
+                          <tr>
+                            <th>Tutor Name</th>
+                            <th>Grade</th>
+                            <th>Diagnostic Score</th>
+                            <th>Teacher Approved</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allTutorsList.map((t) => {
+                            const curTopicId = selectedTopic?.id || 1;
+                            const isApproved = !!t.teacherApproved?.[curTopicId];
+                            const isSuspended = !!t.isSuspended;
+                            const scoreVal = t.verifiedScore?.[curTopicId];
+                            const scorePct = scoreVal !== undefined ? `${Math.round(scoreVal * 100)}%` : "N/A";
+
+                            return (
+                              <tr key={t.id}>
+                                <td><strong>{t.name}</strong></td>
+                                <td>Form {t.grade}</td>
+                                <td>
+                                  <span className={`stat-badge ${scoreVal && scoreVal >= 0.8 ? "gain" : "score"}`}>
+                                    {scorePct}
+                                  </span>
+                                </td>
+                                <td>
+                                  {isApproved ? (
+                                    <span style={{ color: "#10b981", fontWeight: "700", fontSize: "12px" }}>✓ Approved (Topic {curTopicId})</span>
+                                  ) : (
+                                    <span style={{ color: "#f59e0b", fontWeight: "700", fontSize: "12px" }}>⏳ Pending Review</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {isSuspended ? (
+                                    <span style={{ color: "#ef4444", fontWeight: "700", fontSize: "12px" }}>⛔ Suspended</span>
+                                  ) : (
+                                    <span style={{ color: "#10b981", fontWeight: "700", fontSize: "12px" }}>Active</span>
+                                  )}
+                                </td>
+                                <td>
+                                  <div style={{ display: "flex", gap: "6px" }}>
+                                    <button
+                                      className="btn-small-reset"
+                                      onClick={() => handleToggleTutorApproval(t.id, curTopicId, isApproved)}
+                                      style={{ borderColor: isApproved ? "#cbd5e1" : "#10b981", color: isApproved ? "#64748b" : "#065f46" }}
+                                    >
+                                      {isApproved ? "Revoke Approval" : "Approve Tutor"}
+                                    </button>
+                                    <button
+                                      className="btn-small-reset"
+                                      onClick={() => handleToggleTutorSuspension(t.id, isSuspended)}
+                                      style={{ borderColor: isSuspended ? "#10b981" : "#ef4444", color: isSuspended ? "#065f46" : "#991b1b" }}
+                                    >
+                                      {isSuspended ? "Reinstate" : "Suspend (SAFE-2)"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="class-actions-bar">
+                      <div>
+                        <h2 className="dash-section-heading">Confidential Safeguarding Reports (SAFE-4)</h2>
+                        <span className="section-sub-tip">
+                          Direct incident alerts from students and tutors forwarded to School Administration.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Reports Table */}
+                    <div className="roster-table-wrapper">
+                      <table className="roster-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Reporter</th>
+                            <th>Target</th>
+                            <th>Reason</th>
+                            <th>Details</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {safeguardingReports.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "20px" }}>
+                                No safeguarding reports filed. All peer sessions are operating safely.
+                              </td>
+                            </tr>
+                          ) : (
+                            safeguardingReports.map((r) => (
+                              <tr key={r.id}>
+                                <td style={{ fontSize: "11px", color: "#64748b" }}>
+                                  {new Date(r.created_at).toLocaleDateString()}
+                                </td>
+                                <td>{r.reporter_name || r.reporter_id}</td>
+                                <td>{r.target_name || r.target_id || "Session"}</td>
+                                <td><strong>{r.reason}</strong></td>
+                                <td style={{ maxWidth: "220px", fontSize: "12px", color: "#475569" }}>{r.details || "None"}</td>
+                                <td>
+                                  <span className={`status-chip ${r.status === "open" ? "offline" : "online"}`}>
+                                    {r.status.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td>
+                                  {r.status === "open" ? (
+                                    <button
+                                      className="btn-small-reset"
+                                      onClick={() => handleResolveReport(r.id)}
+                                      style={{ backgroundColor: "#ecfdf5", color: "#065f46", borderColor: "#a7f3d0" }}
+                                    >
+                                      Mark Resolved
+                                    </button>
+                                  ) : (
+                                    <span style={{ fontSize: "12px", color: "#64748b" }}>Resolved</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -1976,6 +2291,66 @@ export default function App() {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================== */}
+      {/* Problem Report Modal (SAFE-4)                                         */}
+      {/* ====================================================================== */}
+      {showReportModal && (
+        <div className="auth-modal-overlay" onClick={() => setShowReportModal(false)}>
+          <div className="auth-modal-card" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-x" onClick={() => setShowReportModal(false)}>✕</button>
+
+            <div>
+              <h2 className="dash-section-heading">Report a Problem</h2>
+              <span className="section-sub-tip">
+                Confidential safeguarding report to your school teacher and administration.
+              </span>
+            </div>
+
+            <form className="auth-form" onSubmit={handleSubmitReport}>
+              <div className="form-group">
+                <label className="form-label"><span>Subject / Target</span></label>
+                <input
+                  type="text"
+                  disabled
+                  value={reportingTarget ? reportingTarget.name : "Session Incident"}
+                  className="form-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label"><span>Category / Reason</span></label>
+                <select
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="form-input"
+                >
+                  <option value="Inappropriate behavior">Inappropriate behavior</option>
+                  <option value="Unsafe study location">Unsafe study location</option>
+                  <option value="Tutor did not attend">Tutor did not attend</option>
+                  <option value="Content difficulty or concern">Content difficulty or concern</option>
+                  <option value="Other concern">Other concern</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label"><span>Additional Details (Optional)</span></label>
+                <textarea
+                  value={reportDetails}
+                  onChange={(e) => setReportDetails(e.target.value)}
+                  placeholder="Describe what occurred. This is kept strictly confidential."
+                  className="form-input"
+                  style={{ height: "90px" }}
+                />
+              </div>
+
+              <button type="submit" className="form-submit-btn" style={{ backgroundColor: "#ef4444" }}>
+                Submit Confidential Report (SAFE-4)
+              </button>
+            </form>
           </div>
         </div>
       )}

@@ -13,9 +13,22 @@ export interface MatchEvaluation {
 
 /** Evaluates a match and returns the overall score alongside explainable breakdown factors. */
 export function evaluateMatch(learner: Person, tutor: Tutor, topicId: number): MatchEvaluation {
-  const mastery = tutor.verifiedScore[topicId] ?? 0;
+  // SAFE-2: Suspended tutors never match
+  if (tutor.isSuspended) return { score: 0, breakdown: [] };
+
+  // Hard filter: Cannot match self
   if (tutor.id === learner.id) return { score: 0, breakdown: [] };
-  if (mastery < 0.8) return { score: 0, breakdown: [] };                   // must be verified strong (>=80%)
+
+  // SAFE-1: Diagnostic score must be 80% or higher (>=0.8)
+  const mastery = tutor.verifiedScore[topicId] ?? 0;
+  if (mastery < 0.8) return { score: 0, breakdown: [] };
+
+  // SAFE-1: Must be explicitly approved by teacher for this topic
+  if (!tutor.teacherApproved || !tutor.teacherApproved[topicId]) {
+    return { score: 0, breakdown: [] };
+  }
+
+  // Grade level bounds
   if (tutor.grade < learner.grade) return { score: 0, breakdown: [] };     // same grade or higher
   if (tutor.grade - learner.grade > 2) return { score: 0, breakdown: [] }; // but not too far apart
 
