@@ -2,12 +2,24 @@ import express from "express";
 import cors from "cors";
 import { topics, learners, tutors, lessons, sessions } from "./data";
 import { rankTutors } from "./matching";
-import type { SessionResult, Tutor } from "../../shared/types";
+import {
+  schoolsStore,
+  profilesStore,
+  studentFirstSetup,
+  studentLogin,
+  resetStudentPin,
+  importStudentsCSV,
+  submitSchoolApplication,
+  approveSchoolApplication,
+  applicationsStore,
+} from "./auth";
+import type { SessionResult } from "../../shared/types";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Curriculum endpoints
 app.get("/api/topics", (_req, res) => res.json(topics));
 
 // Bulk download: fetch all lessons in a single call for offline pack caching
@@ -38,7 +50,6 @@ app.post("/api/tutors/verify", (req, res) => {
 
   if (verified) {
     if (!tutor) {
-      // Create new verified tutor entry
       tutor = {
         id: studentId,
         name: studentName || "Verified Peer Tutor",
@@ -74,7 +85,6 @@ app.post("/api/sessions", (req, res) => {
     return res.status(400).json({ error: "Invalid session" });
   if (!sessions.some((x) => x.client_id === s.client_id)) {
     sessions.push(s);
-    // Feed outcomes back into matching
     const t = tutors.find((t) => t.id === s.tutorId);
     if (t) {
       const mine = sessions.filter((x) => x.tutorId === t.id);
@@ -100,6 +110,63 @@ app.get("/api/teacher/summary", (_req, res) => {
     };
   });
   res.json(out);
+});
+
+// ============================================================================
+// Phase 2: AUTH, ONB, and CLS Endpoints
+// ============================================================================
+
+// AUTH-3: Student first-time setup (school code + reg number + setup code -> sets 6-digit PIN)
+app.post("/api/auth/student-setup", (req, res) => {
+  const result = studentFirstSetup(req.body);
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+// AUTH-4 & AUTH-5: Student login with 5-attempt/15-minute lockout
+app.post("/api/auth/student-login", (req, res) => {
+  const result = studentLogin(req.body);
+  const status = result.ok ? 200 : result.locked ? 403 : 401;
+  res.status(status).json(result);
+});
+
+// AUTH-6: Teacher PIN Reset
+app.post("/api/auth/reset-pin", (req, res) => {
+  const { teacherId, schoolId, regNumber } = req.body;
+  if (!schoolId || !regNumber) {
+    return res.status(400).json({ ok: false, error: "schoolId and regNumber are required." });
+  }
+  const result = resetStudentPin(teacherId || "teacher1", schoolId, regNumber);
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+// CLS-1 & CLS-3: Student CSV import and roster
+app.post("/api/students/import-csv", (req, res) => {
+  const { schoolId, rows } = req.body;
+  if (!schoolId || !Array.isArray(rows)) {
+    return res.status(400).json({ error: "schoolId and rows array are required." });
+  }
+  res.json(importStudentsCSV(schoolId, rows));
+});
+
+app.get("/api/students", (req, res) => {
+  const schoolId = req.query.schoolId as string;
+  const filtered = profilesStore.filter((p) => !schoolId || p.school_id === schoolId);
+  res.json(filtered);
+});
+
+// ONB-1 to ONB-4: School onboarding applications and tenant management
+app.get("/api/schools", (_req, res) => res.json(schoolsStore));
+
+app.post("/api/schools/apply", (req, res) => {
+  res.json(submitSchoolApplication(req.body));
+});
+
+app.get("/api/schools/applications", (_req, res) => res.json(applicationsStore));
+
+app.post("/api/schools/approve", (req, res) => {
+  const { applicationId } = req.body;
+  if (!applicationId) return res.status(400).json({ error: "applicationId is required." });
+  res.json(approveSchoolApplication(applicationId));
 });
 
 const port = Number(process.env.PORT ?? 3001);

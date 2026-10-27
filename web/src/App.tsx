@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import type { Lesson, Question, RankedTutor, Topic } from "../../shared/types";
+import type { AuthSession, Lesson, Question, RankedTutor, StudentProfile, Topic } from "../../shared/types";
 import {
   cacheTopics,
   cachedTopics,
@@ -13,6 +13,9 @@ import {
   cachedTeacherSummary,
   getLastSyncTime,
   syncOutbox,
+  getAuthSession,
+  saveAuthSession,
+  clearAuthSession,
 } from "./db";
 
 const LEARNER_ID = "l1";
@@ -182,6 +185,48 @@ export default function App() {
   const [verifyMsg, setVerifyMsg] = useState("");
   const [verifyAnswers, setVerifyAnswers] = useState<number[]>([]);
 
+  // Phase 2: Authentication & Multi-School Tenant State (AUTH-1..8)
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "first_setup" | "school_apply">("login");
+  const [authSchoolCode, setAuthSchoolCode] = useState("ALLIANCE");
+  const [authRegNumber, setAuthRegNumber] = useState("");
+  const [authPin, setAuthPin] = useState("");
+  const [authSetupCode, setAuthSetupCode] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authSuccess, setAuthSuccess] = useState("");
+
+  // School Application State (ONB-1..4)
+  const [appSchoolName, setAppSchoolName] = useState("");
+  const [appCounty, setAppCounty] = useState("Kiambu");
+  const [appSchoolType, setAppSchoolType] = useState("Public Extra-County");
+  const [appContactName, setAppContactName] = useState("");
+  const [appContactPhone, setAppContactPhone] = useState("");
+  const [appContactEmail, setAppContactEmail] = useState("");
+  const [appStudentCount, setAppStudentCount] = useState(120);
+  const [appConsent, setAppConsent] = useState(false);
+
+  // Teacher Class Management State (CLS-1..4, AUTH-6)
+  const [teacherTab, setTeacherTab] = useState<"analytics" | "roster">("analytics");
+  const [rosterStudents, setRosterStudents] = useState<StudentProfile[]>([]);
+  const [csvText, setCsvText] = useState("");
+  const [showSlipsModal, setShowSlipsModal] = useState(false);
+  const [resetPinResult, setResetPinResult] = useState<{ regNumber: string; setupCode: string } | null>(null);
+
+  // Load cached offline session on mount (AUTH-8)
+  useEffect(() => {
+    (async () => {
+      const saved = await getAuthSession();
+      if (saved) {
+        setAuthSession(saved);
+        if (saved.user.school_code) {
+          setAuthSchoolCode(saved.user.school_code);
+        }
+      }
+    })();
+  }, []);
+
   const refresh = async () => {
     setOffline(await offlineIds());
     setPending(await pendingCount());
@@ -340,6 +385,199 @@ export default function App() {
       } else {
         setMsg("Teacher analytics requires an active connection for initial load.");
       }
+    }
+    loadRoster();
+  }
+
+  async function handleStudentLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+    setAuthSuccess("");
+    try {
+      const res = await fetch("/api/auth/student-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          school_code: authSchoolCode,
+          reg_number: authRegNumber,
+          pin: authPin,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setAuthError(data.error || "Login failed. Check your school code, registration number, and 6-digit PIN.");
+        return;
+      }
+      const session: AuthSession = data.session;
+      setAuthSession(session);
+      await saveAuthSession(session);
+      setShowAuthModal(false);
+      setAuthPin("");
+      setMsg(`Welcome, ${session.user.full_name}! (School: ${session.user.school_code})`);
+    } catch {
+      setAuthError("Network error. If you've logged in before, the app works offline.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleStudentFirstSetup(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+    setAuthSuccess("");
+    if (!/^\d{6}$/.test(authPin)) {
+      setAuthError("PIN must be exactly 6 digits.");
+      setAuthLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/auth/student-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          school_code: authSchoolCode,
+          reg_number: authRegNumber,
+          setup_code: authSetupCode,
+          pin: authPin,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setAuthError(data.error || "Setup failed. Check your setup code.");
+        return;
+      }
+      setAuthSuccess("✓ PIN created successfully! You can now log in below.");
+      setAuthMode("login");
+      setAuthSetupCode("");
+    } catch {
+      setAuthError("Network connection required for first-time activation.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    await clearAuthSession();
+    setAuthSession(null);
+    setMsg("Logged out. You can browse demo topics or sign in again.");
+  }
+
+  async function handleSchoolApplication(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+    setAuthSuccess("");
+    if (!appConsent) {
+      setAuthError("Parental/guardian consent confirmation is required under Kenyan law.");
+      setAuthLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/schools/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          school_name: appSchoolName,
+          county: appCounty,
+          school_type: appSchoolType,
+          contact_name: appContactName,
+          contact_phone: appContactPhone,
+          contact_email: appContactEmail,
+          student_count: Number(appStudentCount),
+          grades: [1, 2, 3, 4],
+          subjects: ["Mathematics", "Physics", "Chemistry", "Biology"],
+          consent_given: appConsent,
+        }),
+      });
+      const data = await res.json();
+      setAuthSuccess(`✓ Application submitted for ${appSchoolName}! Our team will review within 24 hours.`);
+      setTimeout(() => setShowAuthModal(false), 2000);
+    } catch {
+      setAuthError("Failed to submit application. Please check your internet connection.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function loadRoster(schoolId: string = "s1") {
+    try {
+      const res = await fetch(`/api/students?schoolId=${schoolId}`);
+      if (res.ok) {
+        const students = await res.json();
+        setRosterStudents(students);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handleImportCSV() {
+    if (!csvText.trim()) return;
+    const lines = csvText.trim().split("\n");
+    const rows = [];
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const cols = line.split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
+      const row: any = {};
+      headers.forEach((h, idx) => {
+        row[h] = cols[idx];
+      });
+      const reg = row["reg_number"] || row["admission_number"] || row["adm_no"] || cols[0];
+      const name = row["full_name"] || row["name"] || cols[1];
+      const grade = parseInt(row["grade"] || row["form"] || cols[2] || "1", 10);
+      const stream = row["class_stream"] || row["stream"] || cols[3] || "";
+      if (reg && name) {
+        rows.push({
+          reg_number: reg,
+          full_name: name,
+          grade: isNaN(grade) ? 1 : grade,
+          class_stream: stream,
+        });
+      }
+    }
+
+    try {
+      const res = await fetch("/api/students/import-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: authSession?.user.school_id || "s1", rows }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        setRosterStudents(result.students);
+        setCsvText("");
+        setMsg(`✓ Successfully imported ${result.imported_count} students! Setup codes generated.`);
+      }
+    } catch {
+      setMsg("Failed to import CSV. Check internet connection.");
+    }
+  }
+
+  async function handleResetPin(student: StudentProfile) {
+    try {
+      const res = await fetch("/api/auth/reset-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: student.school_id || "s1",
+          regNumber: student.reg_number,
+          teacherId: authSession?.user.id || "teacher1",
+        }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        setResetPinResult({ regNumber: student.reg_number, setupCode: result.new_setup_code });
+        setRosterStudents((prev) =>
+          prev.map((s) => (s.reg_number === student.reg_number ? { ...s, setup_code: result.new_setup_code } : s))
+        );
+        setMsg(`✓ PIN reset for ${student.full_name}. New setup code: ${result.new_setup_code}`);
+      }
+    } catch {
+      setMsg("Failed to reset student PIN.");
     }
   }
 
@@ -533,10 +771,45 @@ export default function App() {
                 <span>{isSyncing ? "Syncing..." : pending > 0 ? `Sync (${pending})` : "Sync Now"}</span>
               </button>
 
-              <div className="user-profile-badge">
-                <div className="user-avatar-circle">A</div>
-                <span className="user-name">Amani R.</span>
-              </div>
+              {authSession ? (
+                <div className="user-profile-badge" onClick={handleLogout} title="Click to log out">
+                  <div className="user-avatar-circle">
+                    {authSession.user.full_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
+                    <span className="user-name">{authSession.user.full_name}</span>
+                    <span style={{ fontSize: "11px", color: "#64748b" }}>
+                      {authSession.user.school_code} • {authSession.user.reg_number ? `Adm ${authSession.user.reg_number}` : authSession.user.role}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "12px", color: "#94a3b8", marginLeft: "4px" }}>✕</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    className="auth-btn-top signin"
+                    onClick={() => {
+                      setAuthError("");
+                      setAuthSuccess("");
+                      setAuthMode("login");
+                      setShowAuthModal(true);
+                    }}
+                  >
+                    Student Login / PIN Setup
+                  </button>
+                  <button
+                    className="auth-btn-top apply"
+                    onClick={() => {
+                      setAuthError("");
+                      setAuthSuccess("");
+                      setAuthMode("school_apply");
+                      setShowAuthModal(true);
+                    }}
+                  >
+                    Onboard School
+                  </button>
+                </div>
+              )}
             </div>
           </header>
 
@@ -1195,70 +1468,517 @@ export default function App() {
             </div>
           )}
 
-          {/* Teacher Analytics Dashboard */}
+          {/* Teacher Analytics & Class Management Dashboard */}
           {navView === "teacher" && (
             <div className="dash-stage-container">
               <div className="stage-back-bar">
                 <button className="back-link-btn" onClick={() => setNavView("dashboard")}>
                   ← Back to Student Dashboard
                 </button>
-                <div className="stage-title-pill">Teacher Analytics</div>
+                <div className="stage-title-pill">Teacher Portal</div>
               </div>
 
               <div className="dash-card teacher-analytics-card">
-                <h2 className="dash-section-heading">Cohort Learning Impact & Diagnostics</h2>
-                <p className="dash-section-desc">
-                  Aggregated telemetry comparing pre-session diagnostics against post-session mastery.
-                </p>
-
-                <div className="analytics-topic-list">
-                  {summary.map((s) => {
-                    const gain = Math.round((s.avgPost - s.avgPre) * 100);
-                    return (
-                      <div key={s.topic} className="analytics-topic-row">
-                        <div className="analytics-row-header">
-                          <div>
-                            <strong>{s.topic}</strong>
-                            <span className="analytics-session-count">
-                              {s.sessions} student session{s.sessions === 1 ? "" : "s"}
-                              {s.avgRating ? ` • Avg Rating: ★ ${s.avgRating.toFixed(1)}` : ""}
-                            </span>
-                          </div>
-                          <span className={`gain-chip ${gain >= 0 ? "positive" : "negative"}`}>
-                            {gain >= 0 ? `+${gain}%` : `${gain}%`} Gain
-                          </span>
-                        </div>
-
-                        <div className="dual-progress-container">
-                          <div className="progress-bar-item">
-                            <div className="progress-label-row">
-                              <span>Pre-Quiz Baseline</span>
-                              <strong>{pct(s.avgPre)}</strong>
-                            </div>
-                            <div className="progress-track">
-                              <div className="progress-fill pre" style={{ width: pct(s.avgPre) }} />
-                            </div>
-                          </div>
-
-                          <div className="progress-bar-item">
-                            <div className="progress-label-row">
-                              <span>Post-Quiz Mastery</span>
-                              <strong>{pct(s.avgPost)}</strong>
-                            </div>
-                            <div className="progress-track">
-                              <div className="progress-fill post" style={{ width: pct(s.avgPost) }} />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="teacher-tabs-nav">
+                  <button
+                    className={`teacher-tab-btn ${teacherTab === "analytics" ? "active" : ""}`}
+                    onClick={() => setTeacherTab("analytics")}
+                  >
+                    Cohort Learning Analytics
+                  </button>
+                  <button
+                    className={`teacher-tab-btn ${teacherTab === "roster" ? "active" : ""}`}
+                    onClick={() => {
+                      setTeacherTab("roster");
+                      loadRoster(authSession?.user.school_id || "s1");
+                    }}
+                  >
+                    Class Roster & Setup Slips (CLS-1..4)
+                  </button>
                 </div>
+
+                {teacherTab === "analytics" ? (
+                  <>
+                    <h2 className="dash-section-heading">Cohort Learning Impact & Diagnostics</h2>
+                    <p className="dash-section-desc">
+                      Aggregated telemetry comparing pre-session diagnostics against post-session mastery.
+                    </p>
+
+                    <div className="analytics-topic-list">
+                      {summary.map((s) => {
+                        const gain = Math.round((s.avgPost - s.avgPre) * 100);
+                        return (
+                          <div key={s.topic} className="analytics-topic-row">
+                            <div className="analytics-row-header">
+                              <div>
+                                <strong>{s.topic}</strong>
+                                <span className="analytics-session-count">
+                                  {s.sessions} student session{s.sessions === 1 ? "" : "s"}
+                                  {s.avgRating ? ` • Avg Rating: ★ ${s.avgRating.toFixed(1)}` : ""}
+                                </span>
+                              </div>
+                              <span className={`gain-chip ${gain >= 0 ? "positive" : "negative"}`}>
+                                {gain >= 0 ? `+${gain}%` : `${gain}%`} Gain
+                              </span>
+                            </div>
+
+                            <div className="dual-progress-container">
+                              <div className="progress-bar-item">
+                                <div className="progress-label-row">
+                                  <span>Pre-Quiz Baseline</span>
+                                  <strong>{pct(s.avgPre)}</strong>
+                                </div>
+                                <div className="progress-track">
+                                  <div className="progress-fill pre" style={{ width: pct(s.avgPre) }} />
+                                </div>
+                              </div>
+
+                              <div className="progress-bar-item">
+                                <div className="progress-label-row">
+                                  <span>Post-Quiz Mastery</span>
+                                  <strong>{pct(s.avgPost)}</strong>
+                                </div>
+                                <div className="progress-track">
+                                  <div className="progress-fill post" style={{ width: pct(s.avgPost) }} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="class-mgmt-container">
+                    <div className="class-actions-bar">
+                      <div>
+                        <h2 className="dash-section-heading">Student Class Roster</h2>
+                        <span className="section-sub-tip">
+                          School Tenant: {authSession?.user.school_code || "ALLIANCE"} • {rosterStudents.length} Students Enrolled
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <button
+                          className="action-pill-btn primary"
+                          onClick={() => setShowSlipsModal(true)}
+                          disabled={rosterStudents.length === 0}
+                        >
+                          🖨️ Printable Setup Slips ({rosterStudents.length})
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* CSV Import Box (CLS-1) */}
+                    <div className="csv-upload-box">
+                      <div style={{ textAlign: "left", width: "100%" }}>
+                        <strong>Bulk Import Students via CSV (CLS-1)</strong>
+                        <span className="section-sub-tip">Format: reg_number, full_name, grade, class_stream</span>
+                      </div>
+                      <textarea
+                        value={csvText}
+                        onChange={(e) => setCsvText(e.target.value)}
+                        placeholder="reg_number, full_name, grade, class_stream&#10;ADM-201, Faith Muthoni, 2, North&#10;ADM-202, Brian Kiprono, 3, West&#10;ADM-203, Mary Wanjiku, 1, East"
+                      />
+                      <div style={{ display: "flex", justifyContent: "flex-end", width: "100%", gap: "8px" }}>
+                        <button
+                          className="action-pill-btn primary"
+                          onClick={handleImportCSV}
+                          disabled={!csvText.trim()}
+                        >
+                          Import Roster & Generate Setup Codes
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Roster Table */}
+                    <div className="roster-table-wrapper">
+                      <table className="roster-table">
+                        <thead>
+                          <tr>
+                            <th>Adm / Reg No</th>
+                            <th>Student Name</th>
+                            <th>Form / Grade</th>
+                            <th>Stream</th>
+                            <th>One-Time Setup Code</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rosterStudents.map((s) => (
+                            <tr key={s.id || s.reg_number}>
+                              <td><strong>{s.reg_number}</strong></td>
+                              <td>{s.full_name}</td>
+                              <td>Form {s.grade}</td>
+                              <td>{s.class_stream || "General"}</td>
+                              <td>
+                                {s.setup_code ? (
+                                  <span className="setup-code-badge">{s.setup_code}</span>
+                                ) : (
+                                  <span style={{ color: "#10b981", fontSize: "12px", fontWeight: "700" }}>✓ Activated</span>
+                                )}
+                              </td>
+                              <td>
+                                <button
+                                  className="btn-small-reset"
+                                  onClick={() => handleResetPin(s)}
+                                  title="Teacher PIN Reset (AUTH-6)"
+                                >
+                                  Reset PIN
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </section>
       </div>
+
+      {/* ====================================================================== */}
+      {/* Printable Setup Slips Modal (CLS-3)                                   */}
+      {/* ====================================================================== */}
+      {showSlipsModal && (
+        <div className="auth-modal-overlay" onClick={() => setShowSlipsModal(false)}>
+          <div className="auth-modal-card" style={{ maxWidth: "760px" }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-x" onClick={() => setShowSlipsModal(false)}>✕</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 className="dash-section-heading">Printable Student Setup Slips</h2>
+                <span className="section-sub-tip">Distribute these one-time codes to students for initial account setup</span>
+              </div>
+              <button className="action-pill-btn primary" onClick={() => window.print()}>
+                🖨️ Print Slips
+              </button>
+            </div>
+
+            <div className="slips-grid">
+              {rosterStudents.map((s) => (
+                <div key={s.reg_number} className="student-slip-card">
+                  <div className="slip-school-code">PEERLEARN • {authSession?.user.school_code || "ALLIANCE"}</div>
+                  <div className="slip-student-name">{s.full_name}</div>
+                  <div className="slip-reg-number">Admission: <strong>{s.reg_number}</strong> (Form {s.grade})</div>
+                  <div className="slip-code-box">
+                    <span style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase" }}>One-Time Setup Code</span>
+                    <div className="slip-code-highlight">{s.setup_code || "ACTIVE"}</div>
+                  </div>
+                  <div className="slip-instructions">
+                    1. Go to peerlearn app.<br/>
+                    2. Click "First-Time PIN Setup".<br/>
+                    3. Enter this setup code and pick your secret 6-digit PIN.
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================== */}
+      {/* Phase 2: Auth Modal (Login / First Setup / School Apply)              */}
+      {/* ====================================================================== */}
+      {showAuthModal && (
+        <div className="auth-modal-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="auth-modal-card" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-x" onClick={() => setShowAuthModal(false)}>✕</button>
+
+            {/* Modal Tabs */}
+            <div className="auth-tabs-row">
+              <button
+                className={`auth-tab-btn ${authMode === "login" ? "active" : ""}`}
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                  setAuthSuccess("");
+                }}
+              >
+                Student Sign In
+              </button>
+              <button
+                className={`auth-tab-btn ${authMode === "first_setup" ? "active" : ""}`}
+                onClick={() => {
+                  setAuthMode("first_setup");
+                  setAuthError("");
+                  setAuthSuccess("");
+                }}
+              >
+                First-Time Setup
+              </button>
+              <button
+                className={`auth-tab-btn ${authMode === "school_apply" ? "active" : ""}`}
+                onClick={() => {
+                  setAuthMode("school_apply");
+                  setAuthError("");
+                  setAuthSuccess("");
+                }}
+              >
+                Onboard School
+              </button>
+            </div>
+
+            {authError && <div className="auth-error-banner">{authError}</div>}
+            {authSuccess && <div className="auth-success-banner">{authSuccess}</div>}
+
+            {/* Mode 1: Student Login (AUTH-4, AUTH-5) */}
+            {authMode === "login" && (
+              <form className="auth-form" onSubmit={handleStudentLogin}>
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>School Code</span>
+                    <span className="form-hint">e.g. ALLIANCE</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={authSchoolCode}
+                    onChange={(e) => setAuthSchoolCode(e.target.value.toUpperCase())}
+                    className="form-input"
+                    placeholder="ALLIANCE"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>Registration / Admission Number</span>
+                    <span className="form-hint">e.g. ADM-101</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={authRegNumber}
+                    onChange={(e) => setAuthRegNumber(e.target.value)}
+                    className="form-input"
+                    placeholder="ADM-101"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>6-Digit Secret PIN</span>
+                    <span className="form-hint">5 attempts before 15m lockout</span>
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    required
+                    value={authPin}
+                    onChange={(e) => setAuthPin(e.target.value.replace(/\D/g, ""))}
+                    className="form-input pin-input"
+                    placeholder="••••••"
+                  />
+                </div>
+
+                <button type="submit" className="form-submit-btn" disabled={authLoading || authPin.length !== 6}>
+                  {authLoading ? "Verifying..." : "Sign In to PeerLearn"}
+                </button>
+
+                <div style={{ textAlign: "center", fontSize: "12px", color: "#64748b", marginTop: "8px" }}>
+                  Haven't set your PIN yet?{" "}
+                  <a
+                    href="#setup"
+                    style={{ color: "#0f172a", fontWeight: "700" }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setAuthMode("first_setup");
+                    }}
+                  >
+                    Activate with setup slip →
+                  </a>
+                </div>
+              </form>
+            )}
+
+            {/* Mode 2: First-Time Setup (AUTH-3) */}
+            {authMode === "first_setup" && (
+              <form className="auth-form" onSubmit={handleStudentFirstSetup}>
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>School Code</span>
+                    <span className="form-hint">From your teacher's slip</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={authSchoolCode}
+                    onChange={(e) => setAuthSchoolCode(e.target.value.toUpperCase())}
+                    className="form-input"
+                    placeholder="ALLIANCE"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>Registration Number</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={authRegNumber}
+                    onChange={(e) => setAuthRegNumber(e.target.value)}
+                    className="form-input"
+                    placeholder="ADM-101"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>One-Time Setup Code</span>
+                    <span className="form-hint">6-character code printed on slip</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={10}
+                    value={authSetupCode}
+                    onChange={(e) => setAuthSetupCode(e.target.value.toUpperCase().trim())}
+                    className="form-input"
+                    placeholder="e.g. 7K9X2B"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>Choose Your 6-Digit PIN</span>
+                    <span className="form-hint">You will use this to sign in</span>
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    required
+                    value={authPin}
+                    onChange={(e) => setAuthPin(e.target.value.replace(/\D/g, ""))}
+                    className="form-input pin-input"
+                    placeholder="••••••"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="form-submit-btn"
+                  disabled={authLoading || !authSetupCode || authPin.length !== 6}
+                >
+                  {authLoading ? "Activating..." : "Create PIN & Activate Account"}
+                </button>
+              </form>
+            )}
+
+            {/* Mode 3: School Onboarding Application (ONB-1..4) */}
+            {authMode === "school_apply" && (
+              <form className="auth-form" onSubmit={handleSchoolApplication}>
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>School Name</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={appSchoolName}
+                    onChange={(e) => setAppSchoolName(e.target.value)}
+                    className="form-input"
+                    placeholder="e.g. Lenana School"
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div className="form-group">
+                    <label className="form-label">
+                      <span>County</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={appCounty}
+                      onChange={(e) => setAppCounty(e.target.value)}
+                      className="form-input"
+                      placeholder="Nairobi"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">
+                      <span>School Type</span>
+                    </label>
+                    <select
+                      value={appSchoolType}
+                      onChange={(e) => setAppSchoolType(e.target.value)}
+                      className="form-input"
+                    >
+                      <option value="Public National">Public National</option>
+                      <option value="Public Extra-County">Public Extra-County</option>
+                      <option value="Public County">Public County</option>
+                      <option value="Private Secondary">Private Secondary</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div className="form-group">
+                    <label className="form-label">
+                      <span>Contact Teacher/Admin</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={appContactName}
+                      onChange={(e) => setAppContactName(e.target.value)}
+                      className="form-input"
+                      placeholder="Mr. Kimani"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">
+                      <span>Phone Number</span>
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      value={appContactPhone}
+                      onChange={(e) => setAppContactPhone(e.target.value)}
+                      className="form-input"
+                      placeholder="+254 712 345678"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>Official Email</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={appContactEmail}
+                    onChange={(e) => setAppContactEmail(e.target.value)}
+                    className="form-input"
+                    placeholder="admin@school.ac.ke"
+                  />
+                </div>
+
+                <div className="form-group" style={{ flexDirection: "row", alignItems: "flex-start", gap: "10px" }}>
+                  <input
+                    type="checkbox"
+                    id="consentCheck"
+                    required
+                    checked={appConsent}
+                    onChange={(e) => setAppConsent(e.target.checked)}
+                    style={{ marginTop: "3px" }}
+                  />
+                  <label htmlFor="consentCheck" style={{ fontSize: "11px", color: "#64748b", lineHeight: "1.4" }}>
+                    I confirm that student enrollment adheres to the Kenya Data Protection Act 2019 and parental/guardian consent is maintained on file at the school.
+                  </label>
+                </div>
+
+                <button type="submit" className="form-submit-btn" disabled={authLoading || !appConsent}>
+                  {authLoading ? "Submitting..." : "Submit Application for Sandbox Pilot"}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

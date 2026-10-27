@@ -1,5 +1,5 @@
 import { openDB } from "idb";
-import type { Lesson, SessionResult, Topic } from "../../shared/types";
+import type { AuthSession, Lesson, SessionResult, Topic } from "../../shared/types";
 
 // Offline layer: lessons + topics cached locally, results queued in an outbox.
 const dbp = openDB("peerlearn", 1, {
@@ -71,3 +71,29 @@ export async function syncOutbox(): Promise<{ syncedCount: number; remainingCoun
   await setLastSyncTime(now);
   return { syncedCount: synced, remainingCount: remaining, timestamp: now };
 }
+
+// Session offline caching (AUTH-8)
+export const saveAuthSession = async (s: AuthSession) => {
+  localStorage.setItem("peerlearn_auth_session", JSON.stringify(s));
+  const db = await dbp;
+  await db.put("meta", s, "current_auth_session");
+};
+
+export const getAuthSession = async (): Promise<AuthSession | null> => {
+  try {
+    const db = await dbp;
+    const session = await db.get("meta", "current_auth_session");
+    if (session) return session;
+  } catch {
+    /* fallback to localStorage */
+  }
+  const raw = localStorage.getItem("peerlearn_auth_session");
+  return raw ? JSON.parse(raw) : null;
+};
+
+export const clearAuthSession = async () => {
+  localStorage.removeItem("peerlearn_auth_session");
+  const db = await dbp;
+  await db.delete("meta", "current_auth_session");
+};
+
