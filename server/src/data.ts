@@ -38,14 +38,19 @@ export const lessons: Lesson[] = [
       "Two steps: 2x + 3 = 11 -> subtract 3 -> 2x = 8 -> divide by 2 -> x = 4.",
     ],
     pre: [
-      { q: "Solve: x + 4 = 9", options: ["3", "5", "13"], answer: 1 },
-      { q: "Solve: 3x = 12", options: ["4", "9", "15"], answer: 0 },
-      { q: "Solve: 2x + 1 = 7", options: ["2", "3", "4"], answer: 1 },
+      { id: "q1_pre_1", q: "Solve: x + 4 = 9", options: ["3", "5", "13"], answer: 1, sub_skill: "addition_equations", difficulty: 1, language: "en" },
+      { id: "q1_pre_2", q: "Solve: 3x = 12", options: ["4", "9", "15"], answer: 0, sub_skill: "multiplication_equations", difficulty: 2, language: "en" },
+      { id: "q1_pre_3", q: "Solve: 2x + 1 = 7", options: ["2", "3", "4"], answer: 1, sub_skill: "two_step_equations", difficulty: 3, language: "en" },
     ],
     post: [
-      { q: "Solve: x + 6 = 10", options: ["4", "16", "6"], answer: 0 },
-      { q: "Solve: 4x = 20", options: ["16", "5", "80"], answer: 1 },
-      { q: "Solve: 3x + 2 = 11", options: ["3", "4", "5"], answer: 0 },
+      { id: "q1_post_1", q: "Solve: x + 6 = 10", options: ["4", "16", "6"], answer: 0, sub_skill: "addition_equations", difficulty: 1, language: "en" },
+      { id: "q1_post_2", q: "Solve: 4x = 20", options: ["16", "5", "80"], answer: 1, sub_skill: "multiplication_equations", difficulty: 2, language: "en" },
+      { id: "q1_post_3", q: "Solve: 3x + 2 = 11", options: ["3", "4", "5"], answer: 0, sub_skill: "two_step_equations", difficulty: 3, language: "en" },
+    ],
+    retention: [
+      { id: "q1_ret_1", q: "Solve: x - 3 = 8", options: ["5", "11", "24"], answer: 1, sub_skill: "subtraction_equations", difficulty: 1, language: "en" },
+      { id: "q1_ret_2", q: "Solve: 5x = 35", options: ["7", "30", "40"], answer: 0, sub_skill: "multiplication_equations", difficulty: 2, language: "en" },
+      { id: "q1_ret_3", q: "Solve: 2x - 4 = 10", options: ["3", "5", "7"], answer: 2, sub_skill: "two_step_equations", difficulty: 3, language: "en" },
     ],
   },
   {
@@ -62,21 +67,67 @@ export const lessons: Lesson[] = [
       "Heating gives particles energy and can change the state (melting, boiling).",
     ],
     pre: [
-      { q: "Which state keeps its own shape?", options: ["Solid", "Liquid", "Gas"], answer: 0 },
-      { q: "Ice turning to water is called:", options: ["Boiling", "Melting", "Freezing"], answer: 1 },
-      { q: "Particles are furthest apart in a:", options: ["Solid", "Liquid", "Gas"], answer: 2 },
+      { id: "q2_pre_1", q: "Which state keeps its own shape?", options: ["Solid", "Liquid", "Gas"], answer: 0, sub_skill: "shape_properties", difficulty: 1, language: "en" },
+      { id: "q2_pre_2", q: "Ice turning to water is called:", options: ["Boiling", "Melting", "Freezing"], answer: 1, sub_skill: "phase_changes", difficulty: 2, language: "en" },
+      { id: "q2_pre_3", q: "Particles are furthest apart in a:", options: ["Solid", "Liquid", "Gas"], answer: 2, sub_skill: "particle_theory", difficulty: 3, language: "en" },
     ],
     post: [
-      { q: "Which state takes the shape of its container but has a fixed volume?", options: ["Solid", "Liquid", "Gas"], answer: 1 },
-      { q: "Water turning to steam is called:", options: ["Evaporating/boiling", "Freezing", "Melting"], answer: 0 },
-      { q: "Heating particles makes them:", options: ["Slow down", "Stop", "Gain energy"], answer: 2 },
+      { id: "q2_post_1", q: "Which state takes the shape of its container but has a fixed volume?", options: ["Solid", "Liquid", "Gas"], answer: 1, sub_skill: "volume_properties", difficulty: 2, language: "en" },
+      { id: "q2_post_2", q: "Water turning to steam is called:", options: ["Evaporating/boiling", "Freezing", "Melting"], answer: 0, sub_skill: "phase_changes", difficulty: 2, language: "en" },
+      { id: "q2_post_3", q: "Heating particles makes them:", options: ["Slow down", "Stop", "Gain energy"], answer: 2, sub_skill: "thermal_motion", difficulty: 3, language: "en" },
+    ],
+    retention: [
+      { id: "q2_ret_1", q: "Which state of matter can be compressed easily?", options: ["Gas", "Solid", "Liquid"], answer: 0, sub_skill: "compressibility", difficulty: 2, language: "en" },
+      { id: "q2_ret_2", q: "Sublimation occurs when a solid turns directly into a:", options: ["Liquid", "Gas", "Plasma"], answer: 1, sub_skill: "phase_changes", difficulty: 3, language: "en" },
+      { id: "q2_ret_3", q: "In which state do particles only vibrate in place?", options: ["Gas", "Liquid", "Solid"], answer: 2, sub_skill: "particle_theory", difficulty: 1, language: "en" },
     ],
   },
 ];
 
 // Seeded results so the teacher dashboard is not empty during the demo.
 export const sessions: SessionResult[] = [
-  { client_id: "seed-1", learnerId: "x1", tutorId: "t1", topicId: 1, pre: 0.33, post: 0.67, at: new Date().toISOString() },
-  { client_id: "seed-2", learnerId: "x2", tutorId: "t2", topicId: 1, pre: 0.33, post: 1, at: new Date().toISOString() },
-  { client_id: "seed-3", learnerId: "x3", tutorId: "t3", topicId: 2, pre: 0.67, post: 0.67, at: new Date().toISOString() },
+  {
+    client_id: "seed-1",
+    learnerId: "x1",
+    tutorId: "t1",
+    topicId: 1,
+    pre: 0.33,
+    post: 0.67,
+    retention_score: 0.67, // PROOF-3: Retention check 7 days after
+    retention_at: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+    is_comparison_group: false,
+    at: new Date(Date.now() - 9 * 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    client_id: "seed-2",
+    learnerId: "x2",
+    tutorId: "t2",
+    topicId: 1,
+    pre: 0.33,
+    post: 1.0,
+    retention_score: 0.85,
+    retention_at: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString(),
+    is_comparison_group: false,
+    at: new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    client_id: "seed-3",
+    learnerId: "x3",
+    tutorId: "t3",
+    topicId: 2,
+    pre: 0.67,
+    post: 0.67,
+    is_comparison_group: false,
+    at: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    client_id: "seed-comp-1",
+    learnerId: "comp-1",
+    tutorId: "none",
+    topicId: 1,
+    pre: 0.33,
+    post: 0.40, // Standard instruction comparison group without peer tutoring (PROOF-5)
+    is_comparison_group: true,
+    at: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
+  },
 ];

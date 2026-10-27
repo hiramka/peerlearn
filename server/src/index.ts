@@ -23,6 +23,12 @@ import {
   checkGuardianConsent,
   auditLogsStore,
 } from "./safeguarding";
+import {
+  scheduleRetentionCheck,
+  recordRetentionScore,
+  getPendingRetentionTasks,
+  generateProofCohortSummary,
+} from "./proof";
 import type { SessionResult } from "../../shared/types";
 
 const app = express();
@@ -95,6 +101,16 @@ app.post("/api/sessions", (req, res) => {
     return res.status(400).json({ error: "Invalid session" });
   if (!sessions.some((x) => x.client_id === s.client_id)) {
     sessions.push(s);
+
+    // PROOF-3: Automatically schedule a 7-day retention check
+    scheduleRetentionCheck({
+      client_id: s.client_id,
+      school_id: "s1",
+      learner_id: s.learnerId,
+      topic_id: s.topicId,
+      session_completed_at: s.at,
+    });
+
     const t = tutors.find((t) => t.id === s.tutorId);
     if (t) {
       const mine = sessions.filter((x) => x.tutorId === t.id);
@@ -104,22 +120,50 @@ app.post("/api/sessions", (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-// Teacher view: where do students struggle, and is tutoring helping?
+// PROOF-4 & PROOF-5: Evidence & Proof summary showing immediate gain, 7-day retention gain, and comparison group
 app.get("/api/teacher/summary", (_req, res) => {
-  const out = topics.map((t) => {
-    const ss = sessions.filter((s) => s.topicId === t.id);
-    const avg = (f: (s: SessionResult) => number) => (ss.length ? ss.reduce((a, s) => a + f(s), 0) / ss.length : 0);
-    const ratings = ss.filter((s) => typeof s.learnerRating === "number").map((s) => s.learnerRating as number);
-    const avgRating = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
-    return {
-      topic: t.name,
-      sessions: ss.length,
-      avgPre: avg((s) => s.pre),
-      avgPost: avg((s) => s.post),
-      avgRating,
-    };
+  res.json(generateProofCohortSummary(sessions, topics));
+});
+
+// PROOF-3: Retention Checks
+app.get("/api/retention/pending/:learnerId", (req, res) => {
+  const pending = getPendingRetentionTasks(req.params.learnerId);
+  res.json(pending);
+});
+
+app.post("/api/retention/submit", (req, res) => {
+  const { client_id, retention_score, completed_at } = req.body;
+  if (!client_id || typeof retention_score !== "number") {
+    return res.status(400).json({ error: "client_id and numeric retention_score are required." });
+  }
+  const result = recordRetentionScore({ client_id, retention_score, completed_at });
+  res.json(result);
+});
+
+// PROOF-1: Get questions filtered by topic, sub-skill, difficulty, language
+app.get("/api/questions", (req, res) => {
+  const topicId = req.query.topicId ? Number(req.query.topicId) : undefined;
+  const subSkill = req.query.subSkill as string;
+  const difficulty = req.query.difficulty ? Number(req.query.difficulty) : undefined;
+  const language = (req.query.language as string) || "en";
+
+  const allQuestions: any[] = [];
+  lessons.forEach((l) => {
+    if (!topicId || l.topicId === topicId) {
+      l.pre.forEach((q) => allQuestions.push({ ...q, topicId: l.topicId, type: "pre" }));
+      l.post.forEach((q) => allQuestions.push({ ...q, topicId: l.topicId, type: "post" }));
+      l.retention?.forEach((q) => allQuestions.push({ ...q, topicId: l.topicId, type: "retention" }));
+    }
   });
-  res.json(out);
+
+  const filtered = allQuestions.filter((q) => {
+    if (subSkill && q.sub_skill !== subSkill) return false;
+    if (difficulty && q.difficulty !== difficulty) return false;
+    if (language && q.language !== language) return false;
+    return true;
+  });
+
+  res.json(filtered);
 });
 
 // ============================================================================

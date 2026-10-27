@@ -131,7 +131,15 @@ export interface GuardianConsent {
 }
 
 export interface Topic { id: number; subject: string; name: string; grade: number }
-export interface Question { q: string; options: string[]; answer: number }
+export interface Question {
+  id?: string | number;
+  q: string;
+  options: string[];
+  answer: number;
+  sub_skill?: string;
+  difficulty?: number;
+  language?: string;
+}
 
 export interface Lesson {
   topicId: number;
@@ -141,6 +149,7 @@ export interface Lesson {
   explanation: string[];
   pre: Question[];
   post: Question[];
+  retention?: Question[];
 }
 
 export interface MatchFactor {
@@ -155,10 +164,43 @@ export interface SessionResult {
   topicId: number;
   pre: number;  // 0..1
   post: number; // 0..1
+  retention_score?: number; // 0..1 (PROOF-3)
+  retention_at?: string;
+  is_comparison_group?: boolean; // (PROOF-5)
   learnerRating?: number; // 1..5
   tutorRating?: number;   // 1..5
   feedbackTags?: string[];
   at: string;
+}
+
+export interface RetentionCheckTask {
+  id: string;
+  client_id: string;
+  school_id: string;
+  learner_id: string;
+  topic_id: number;
+  session_completed_at: string;
+  due_at: string;
+  retention_score?: number;
+  completed_at?: string;
+  status: 'pending' | 'completed' | 'overdue';
+}
+
+export interface ProofCohortSummary {
+  topic: string;
+  topicId: number;
+  sessions: number;
+  avgPre: number;
+  avgPost: number;
+  immediateGain: number; // avgPost - avgPre
+  retentionSessions: number;
+  avgRetention: number;
+  retentionGain: number; // avgRetention - avgPre
+  avgRating?: number;
+  comparisonGroup?: {
+    learnerCount: number;
+    avgGain: number;
+  };
 }
 
 export interface RankedTutor { tutor: Tutor; score: number; breakdown?: MatchFactor[] }

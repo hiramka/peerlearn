@@ -34,10 +34,12 @@ export const setLastSyncTime = async (iso: string) => (await dbp).put("meta", is
 export const getLastSyncTime = async (): Promise<string | null> => (await (await dbp).get("meta", "last_sync_time")) ?? null;
 
 /** Write locally first, then try to sync. Safe to call offline. */
-export async function queueSession(s: Omit<SessionResult, "client_id" | "at">) {
-  const item: SessionResult = { ...s, client_id: crypto.randomUUID(), at: new Date().toISOString() };
+export async function queueSession(s: Omit<SessionResult, "client_id" | "at"> & { client_id?: string; at?: string }) {
+  const client_id = s.client_id || crypto.randomUUID();
+  const item: SessionResult = { client_id, at: s.at || new Date().toISOString(), ...s };
   await (await dbp).put("outbox", item);
-  return await syncOutbox();
+  const res = await syncOutbox();
+  return { ...res, client_id };
 }
 
 export async function syncOutbox(): Promise<{ syncedCount: number; remainingCount: number; timestamp: string }> {
