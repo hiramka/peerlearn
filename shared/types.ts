@@ -152,6 +152,12 @@ export interface Lesson {
   pre: Question[];
   post: Question[];
   retention?: Question[];
+  status?: "draft" | "published"; // (CONT-2)
+  school_id?: string; // (CONT-3, null = platform library)
+  author_id?: string;
+  grade?: number;
+  subject?: string;
+  updated_at?: string;
 }
 
 export interface MatchFactor {
@@ -255,4 +261,57 @@ export interface DemoResetResult {
   seeded_students: number;
   seeded_tutors: number;
   seeded_sessions: number;
+}
+
+// ============================================================================
+// Phase 6: Dashboards and Content Authoring (DASH-1..2, CONT-1..3)
+// ============================================================================
+
+export interface TopicStruggle {
+  topicId: number;
+  topicName: string;
+  subject: string;
+  grade: number;
+  averageBaseline: number;
+  averageMastery: number;
+  struggleIndex: number; // 0..1 (higher = more struggle)
+  struggleLevel: "low" | "medium" | "high";
+  studentsNeedingHelp: number;
+}
+
+export interface NoImprovementAlert {
+  sessionId: string;
+  learnerId: string;
+  learnerName?: string;
+  tutorId: string;
+  tutorName?: string;
+  topicId: number;
+  topicName?: string;
+  pre: number;
+  post: number;
+  gain: number;
+  at: string;
+}
+
+export interface PlatformSchoolHealth {
+  schoolId: string;
+  schoolName: string;
+  schoolCode: string;
+  status: "pending" | "approved" | "active" | "suspended";
+  studentsCount: number;
+  tutorsCount: number;
+  sessionsCount: number;
+  avgGain: number;
+  lastActivity: string;
+  is_demo?: boolean;
+}
+
+export interface ImpactReport {
+  totalSessions: number;
+  totalLearners: number;
+  totalTutors: number;
+  avgImmediateGain: number;
+  avgRetentionGain: number;
+  demoExcluded: true;
+  generatedAt: string;
 }

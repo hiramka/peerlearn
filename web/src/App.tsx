@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef } from "react";
 import type {
   AuthSession,
+  ImpactReport,
   Lesson,
+  NoImprovementAlert,
+  PlatformSchoolHealth,
   ProofCohortSummary,
   Question,
   RankedTutor,
@@ -10,6 +13,7 @@ import type {
   SessionEventType,
   StudentProfile,
   Topic,
+  TopicStruggle,
   Tutor,
 } from "../../shared/types";
 import {
@@ -35,7 +39,7 @@ import {
 
 const LEARNER_ID = "l1";
 type Stage = "browse" | "pre" | "lesson" | "post" | "retention" | "done";
-type NavView = "dashboard" | "courses" | "schedule" | "teacher" | "verify";
+type NavView = "dashboard" | "courses" | "schedule" | "teacher" | "verify" | "platform_admin";
 type Summary = ProofCohortSummary;
 
 function useOnline() {
@@ -228,7 +232,7 @@ export default function App() {
   const [appConsent, setAppConsent] = useState(false);
 
   // Teacher Class Management & Safeguarding State (CLS-1..4, AUTH-6, SAFE-1..6)
-  const [teacherTab, setTeacherTab] = useState<"analytics" | "roster" | "safeguarding" | "live">("analytics");
+  const [teacherTab, setTeacherTab] = useState<"analytics" | "roster" | "safeguarding" | "live" | "authoring">("analytics");
   const [rosterStudents, setRosterStudents] = useState<StudentProfile[]>([]);
   const [csvText, setCsvText] = useState("");
   const [showSlipsModal, setShowSlipsModal] = useState(false);
@@ -250,6 +254,18 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState<string>(() => `sess-${Date.now()}`);
   const [guestLinkCopied, setGuestLinkCopied] = useState(false);
   const [pendingEvents, setPendingEvents] = useState(0);
+
+  // Phase 6: Dashboards (DASH-1..2) & Content Authoring (CONT-1..3) State
+  const [struggleHeatmap, setStruggleHeatmap] = useState<TopicStruggle[]>([]);
+  const [noImpAlerts, setNoImpAlerts] = useState<NoImprovementAlert[]>([]);
+  const [authoringLessonsList, setAuthoringLessonsList] = useState<Lesson[]>([]);
+  const [newLessonTitle, setNewLessonTitle] = useState("");
+  const [newLessonSubject, setNewLessonSubject] = useState("Math");
+  const [newLessonGrade, setNewLessonGrade] = useState(2);
+  const [newLessonGuide, setNewLessonGuide] = useState("1. Review definitions\n2. Solve step-by-step\n3. Check understanding");
+  const [newLessonExplanation, setNewLessonExplanation] = useState("Key rules for this topic.");
+  const [platformSchools, setPlatformSchools] = useState<PlatformSchoolHealth[]>([]);
+  const [platformReport, setPlatformReport] = useState<ImpactReport | null>(null);
 
   // Load cached offline session on mount (AUTH-8)
   useEffect(() => {
@@ -614,6 +630,93 @@ export default function App() {
     }
     loadRoster();
     loadSafeguardingData();
+    loadTeacherDashboards();
+    loadAuthoringLessons();
+  }
+
+  async function loadTeacherDashboards() {
+    const schoolId = authSession?.user.school_id || "s1";
+    try {
+      const hm = await (await fetch(`/api/teacher/struggle-heatmap?schoolId=${schoolId}`)).json();
+      setStruggleHeatmap(hm);
+      const noImp = await (await fetch(`/api/teacher/no-improvement?schoolId=${schoolId}`)).json();
+      setNoImpAlerts(noImp);
+    } catch {}
+  }
+
+  async function loadAuthoringLessons() {
+    const schoolId = authSession?.user.school_id || "s1";
+    try {
+      const res = await (await fetch(`/api/content/lessons?schoolId=${schoolId}&includeDrafts=true`)).json();
+      setAuthoringLessonsList(res);
+    } catch {}
+  }
+
+  async function loadPlatformAdminData() {
+    try {
+      const schools = await (await fetch("/api/platform/school-health")).json();
+      setPlatformSchools(schools);
+      const rep = await (await fetch("/api/platform/impact-report")).json();
+      setPlatformReport(rep);
+    } catch {}
+  }
+
+  async function handleCreateLesson(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newLessonTitle.trim()) return;
+    try {
+      const res = await fetch("/api/content/lessons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newLessonTitle,
+          subject: newLessonSubject,
+          grade: Number(newLessonGrade),
+          school_id: authSession?.user.school_id || "s1",
+          author_id: authSession?.user.id || "teacher-1",
+          tutorGuide: newLessonGuide.split("\n").filter(Boolean),
+          explanation: [newLessonExplanation],
+          pre: [
+            { q: `Diagnostic check for ${newLessonTitle}`, options: ["Concept A (Correct)", "Distractor B", "Distractor C"], answer: 0, sub_skill: "fundamentals", difficulty: 1, language: "en" }
+          ],
+          post: [
+            { q: `Mastery question for ${newLessonTitle}`, options: ["Incorrect", "Mastery Answer (Correct)", "Incorrect"], answer: 1, sub_skill: "mastery", difficulty: 2, language: "en" }
+          ],
+          retention: [
+            { q: `Retention check for ${newLessonTitle}`, options: ["Wrong", "Wrong", "Retention Answer (Correct)"], answer: 2, sub_skill: "long_term", difficulty: 2, language: "en" }
+          ]
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMsg(`✓ New lesson "${data.lesson.title}" created in Draft status (CONT-1).`);
+        setNewLessonTitle("");
+        loadAuthoringLessons();
+      }
+    } catch {
+      setMsg("Failed to create lesson draft.");
+    }
+  }
+
+  async function handlePublishLesson(topicId: number) {
+    try {
+      const res = await fetch(`/api/content/lessons/${topicId}/publish`, { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setMsg(`✓ ${data.message} Available for student download (CONT-2).`);
+        loadAuthoringLessons();
+        // Refresh curriculum topics
+        const t = await (await fetch("/api/topics")).json();
+        setTopics(t);
+      }
+    } catch {
+      setMsg("Publishing failed.");
+    }
+  }
+
+  function handleExportCSV() {
+    const schoolId = authSession?.user.school_id || "s1";
+    window.open(`/api/teacher/export/csv?schoolId=${schoolId}`, "_blank");
   }
 
   async function handleStudentLogin(e: React.FormEvent) {
@@ -1055,12 +1158,27 @@ export default function App() {
             <button
               className={`rail-icon-btn ${navView === "teacher" ? "active" : ""}`}
               onClick={openTeacherView}
-              title="Teacher Analytics"
+              title="Teacher Analytics & Content (DASH-1, CONT-1)"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="20" x2="18" y2="10" />
                 <line x1="12" y1="20" x2="12" y2="4" />
                 <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+            </button>
+
+            <button
+              className={`rail-icon-btn ${navView === "platform_admin" ? "active" : ""}`}
+              onClick={() => {
+                setNavView("platform_admin");
+                loadPlatformAdminData();
+              }}
+              title="Platform Admin, School Health & Impact (DASH-2)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
               </svg>
             </button>
           </div>
@@ -2043,9 +2161,21 @@ export default function App() {
                 <div className="teacher-tabs-nav">
                   <button
                     className={`teacher-tab-btn ${teacherTab === "analytics" ? "active" : ""}`}
-                    onClick={() => setTeacherTab("analytics")}
+                    onClick={() => {
+                      setTeacherTab("analytics");
+                      loadTeacherDashboards();
+                    }}
                   >
                     Cohort Learning Analytics
+                  </button>
+                  <button
+                    className={`teacher-tab-btn ${teacherTab === "authoring" ? "active" : ""}`}
+                    onClick={() => {
+                      setTeacherTab("authoring");
+                      loadAuthoringLessons();
+                    }}
+                  >
+                    ✏️ Lesson Authoring (CONT-1..3)
                   </button>
                   <button
                     className={`teacher-tab-btn ${teacherTab === "roster" ? "active" : ""}`}
@@ -2075,10 +2205,22 @@ export default function App() {
 
                 {teacherTab === "analytics" ? (
                   <>
-                    <h2 className="dash-section-heading">Cohort Learning Impact & Retention Evidence (PROOF-1..5)</h2>
-                    <p className="dash-section-desc">
-                      Rigorous pilot telemetry tracking immediate mastery gains against 7-day retention persistence, verified against comparison control groups.
-                    </p>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "16px" }}>
+                      <div>
+                        <h2 className="dash-section-heading" style={{ margin: 0 }}>Cohort Learning Impact & Retention Evidence (PROOF-1..5)</h2>
+                        <p className="dash-section-desc" style={{ margin: "4px 0 0 0" }}>
+                          Rigorous pilot telemetry tracking immediate mastery gains against 7-day retention persistence, verified against comparison control groups.
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button className="action-pill-btn" onClick={handleExportCSV}>
+                          📥 Export Pilot CSV (DASH-1)
+                        </button>
+                        <button className="action-pill-btn" onClick={() => window.print()}>
+                          🖨️ Print Report
+                        </button>
+                      </div>
+                    </div>
 
                     <div className="analytics-topic-list">
                       {summary.map((s) => {
@@ -2169,7 +2311,238 @@ export default function App() {
                         );
                       })}
                     </div>
+
+                    {/* DASH-1: Topic Struggle Heatmap */}
+                    <div style={{ marginTop: "24px" }}>
+                      <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
+                        Topic Struggle Heatmap (DASH-1)
+                      </h3>
+                      <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>
+                        Identifies curricula where learners exhibit persistent difficulty, highlighting priority peer tutoring intervention areas.
+                      </p>
+                      {struggleHeatmap.length === 0 ? (
+                        <p style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic", marginTop: "12px" }}>
+                          No struggle data yet. Complete sessions to populate heatmap.
+                        </p>
+                      ) : (
+                        <div className="heatmap-grid">
+                          {struggleHeatmap.map((item) => (
+                            <div key={item.topicId} className={`heatmap-card ${item.struggleLevel}`}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                                <strong>{item.topicName}</strong>
+                                <span className={`struggle-badge ${item.struggleLevel}`}>
+                                  {item.struggleLevel} struggle
+                                </span>
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#64748b", display: "flex", flexDirection: "column", gap: "4px" }}>
+                                <span>Subject & Form: <strong>{item.subject} (Form {item.grade})</strong></span>
+                                <span>Pre-quiz Avg: <strong>{Math.round(item.averageBaseline * 100)}%</strong></span>
+                                <span>Post-quiz Avg: <strong>{Math.round(item.averageMastery * 100)}%</strong></span>
+                                <span>Struggle Index: <strong>{(item.struggleIndex * 100).toFixed(0)} / 100</strong></span>
+                                <span>Students Needing Help: <strong>{item.studentsNeedingHelp}</strong></span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* DASH-1: Flagged Sessions without Improvement */}
+                    {noImpAlerts.length > 0 && (
+                      <div className="no-improvement-banner">
+                        <h4 style={{ margin: "0 0 8px 0", color: "#991b1b", display: "flex", alignItems: "center", gap: "6px" }}>
+                          ⚠️ Flagged Sessions: No Mastery Improvement (DASH-1)
+                        </h4>
+                        <p style={{ fontSize: "12px", color: "#7f1d1d", margin: "0 0 12px 0" }}>
+                          These sessions ended with a post-quiz score less than or equal to the pre-quiz baseline. Follow-up is recommended.
+                        </p>
+                        <div className="roster-table-wrapper" style={{ background: "#ffffff" }}>
+                          <table className="roster-table">
+                            <thead>
+                              <tr>
+                                <th>Session ID</th>
+                                <th>Topic</th>
+                                <th>Learner</th>
+                                <th>Tutor</th>
+                                <th>Pre Score</th>
+                                <th>Post Score</th>
+                                <th>Net Delta</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {noImpAlerts.map((a) => (
+                                <tr key={a.sessionId}>
+                                  <td><code>{a.sessionId.slice(0, 10)}</code></td>
+                                  <td><strong>{a.topicName || `Topic ${a.topicId}`}</strong></td>
+                                  <td>{a.learnerName || a.learnerId}</td>
+                                  <td>{a.tutorName || a.tutorId}</td>
+                                  <td>{Math.round(a.pre * 100)}%</td>
+                                  <td><strong style={{ color: "#ef4444" }}>{Math.round(a.post * 100)}%</strong></td>
+                                  <td>
+                                    <span style={{ color: "#ef4444", fontWeight: "700" }}>
+                                      {Math.round(a.gain * 100)}%
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </>
+                ) : teacherTab === "authoring" ? (
+                  <div className="authoring-container">
+                    <div className="class-actions-bar">
+                      <div>
+                        <h2 className="dash-section-heading">Teacher Lesson Authoring & Publishing (CONT-1, CONT-2, CONT-3)</h2>
+                        <span className="section-sub-tip">
+                          Create custom school lesson modules with diagnostics, tutor guides, and retention questions. Lessons start in Draft mode; publishing bumps the version and pushes to student downloads.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* New Lesson Draft Form */}
+                    <form onSubmit={handleCreateLesson} className="dash-card" style={{ padding: "20px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                      <h3 style={{ fontSize: "15px", fontWeight: "700", marginTop: 0, marginBottom: "12px", color: "#0f172a" }}>
+                        Create New Lesson Draft (CONT-1)
+                      </h3>
+                      <div className="lesson-form-grid">
+                        <div className="form-group">
+                          <label className="form-label">Lesson Title</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={newLessonTitle}
+                            onChange={(e) => setNewLessonTitle(e.target.value)}
+                            placeholder="e.g. Commercial Arithmetic & Taxation"
+                            required
+                          />
+                        </div>
+                        <div style={{ display: "flex", gap: "12px" }}>
+                          <div className="form-group" style={{ flex: 1 }}>
+                            <label className="form-label">Subject</label>
+                            <select
+                              className="form-input"
+                              value={newLessonSubject}
+                              onChange={(e) => setNewLessonSubject(e.target.value)}
+                            >
+                              <option value="Math">Math</option>
+                              <option value="Biology">Biology</option>
+                              <option value="Chemistry">Chemistry</option>
+                              <option value="Physics">Physics</option>
+                            </select>
+                          </div>
+                          <div className="form-group" style={{ flex: 1 }}>
+                            <label className="form-label">Form Level</label>
+                            <select
+                              className="form-input"
+                              value={newLessonGrade}
+                              onChange={(e) => setNewLessonGrade(Number(e.target.value))}
+                            >
+                              <option value={1}>Form 1</option>
+                              <option value={2}>Form 2</option>
+                              <option value={3}>Form 3</option>
+                              <option value={4}>Form 4</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Tutor Step-by-Step Guide (1 per line)</label>
+                          <textarea
+                            className="form-input"
+                            rows={3}
+                            value={newLessonGuide}
+                            onChange={(e) => setNewLessonGuide(e.target.value)}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Core Explanation</label>
+                          <textarea
+                            className="form-input"
+                            rows={3}
+                            value={newLessonExplanation}
+                            onChange={(e) => setNewLessonExplanation(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+                        <button type="submit" className="action-pill-btn primary">
+                          + Save Lesson Draft (v1)
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Lesson Library Table */}
+                    <div className="roster-table-wrapper">
+                      <table className="roster-table">
+                        <thead>
+                          <tr>
+                            <th>Lesson / Topic</th>
+                            <th>Subject & Form</th>
+                            <th>Version</th>
+                            <th>Status</th>
+                            <th>Library Scope</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {authoringLessonsList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "20px" }}>
+                                No lessons authored yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            authoringLessonsList.map((ls) => {
+                              const isDraft = ls.status === "draft";
+                              const isCustom = !!ls.school_id;
+                              return (
+                                <tr key={ls.topicId}>
+                                  <td><strong>{ls.title}</strong></td>
+                                  <td>{ls.subject || "Math"} • Form {ls.grade || 2}</td>
+                                  <td>
+                                    <span className="version-tag">v{ls.version || 1}</span>
+                                  </td>
+                                  <td>
+                                    <span className={isDraft ? "status-badge-draft" : "status-badge-published"}>
+                                      {isDraft ? "Draft (Unpublished)" : "Published"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span style={{ fontSize: "12px", color: isCustom ? "#7c3aed" : "#0284c7", fontWeight: "600" }}>
+                                      {isCustom ? "School Custom" : "Platform Standard"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {isDraft ? (
+                                      <button
+                                        className="action-pill-btn primary"
+                                        style={{ padding: "4px 10px", fontSize: "11px" }}
+                                        onClick={() => handlePublishLesson(ls.topicId)}
+                                        title="Bumps version and makes available to offline downloads (CONT-2)"
+                                      >
+                                        Publish (v{(ls.version || 1) + 1})
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className="action-pill-btn"
+                                        style={{ padding: "4px 10px", fontSize: "11px" }}
+                                        onClick={() => handlePublishLesson(ls.topicId)}
+                                        title="Republish with new version bump"
+                                      >
+                                        Re-publish (v{(ls.version || 1) + 1})
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 ) : teacherTab === "roster" ? (
                   <div className="class-mgmt-container">
                     <div className="class-actions-bar">
@@ -2465,6 +2838,128 @@ export default function App() {
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Phase 6: Platform Multi-School Admin & Impact Reporting (DASH-2, R5) */}
+          {navView === "platform_admin" && (
+            <div className="dash-stage-container">
+              <div className="stage-back-bar">
+                <button className="back-link-btn" onClick={() => setNavView("dashboard")}>
+                  ← Back to Student Dashboard
+                </button>
+                <div className="stage-title-pill">Platform Operations & Impact</div>
+              </div>
+
+              <div className="dash-card teacher-analytics-card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "16px" }}>
+                  <div>
+                    <h2 className="dash-section-heading" style={{ margin: 0 }}>
+                      Ministry & Foundation Aggregate Impact Report (DASH-2)
+                    </h2>
+                    <span className="section-sub-tip">
+                      Consolidated cross-school impact metrics for county education boards and research donors.
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span className="struggle-badge low" style={{ padding: "6px 12px", fontSize: "12px" }}>
+                      🛡️ Demo Data Excluded (R5 Active)
+                    </span>
+                    <button className="action-pill-btn" onClick={loadPlatformAdminData}>
+                      🔄 Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {/* Hero Aggregate Metrics */}
+                {platformReport && (
+                  <div className="impact-hero-grid">
+                    <div className="impact-metric-box">
+                      <div className="impact-metric-value">{platformReport.totalSessions}</div>
+                      <div className="impact-metric-label">Verified Sessions</div>
+                    </div>
+                    <div className="impact-metric-box">
+                      <div className="impact-metric-value">{platformReport.totalLearners}</div>
+                      <div className="impact-metric-label">Active Learners</div>
+                    </div>
+                    <div className="impact-metric-box">
+                      <div className="impact-metric-value">{platformReport.totalTutors}</div>
+                      <div className="impact-metric-label">Certified Tutors</div>
+                    </div>
+                    <div className="impact-metric-box">
+                      <div className="impact-metric-value" style={{ color: "#10b981" }}>
+                        +{Math.round(platformReport.avgImmediateGain * 100)}%
+                      </div>
+                      <div className="impact-metric-label">Avg Mastery Gain</div>
+                    </div>
+                    <div className="impact-metric-box">
+                      <div className="impact-metric-value" style={{ color: "#6366f1" }}>
+                        +{Math.round(platformReport.avgRetentionGain * 100)}%
+                      </div>
+                      <div className="impact-metric-label">7-Day Retention Gain</div>
+                    </div>
+                    <div className="impact-metric-box">
+                      <div className="impact-metric-value" style={{ color: "#059669", fontSize: "18px", paddingTop: "6px" }}>
+                        Active (R5)
+                      </div>
+                      <div className="impact-metric-label">Demo Filter Status</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Multi-School Health Table */}
+                <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a", marginTop: "24px", marginBottom: "8px" }}>
+                  School Tenant Health & Real-World Engagement
+                </h3>
+                <div className="roster-table-wrapper">
+                  <table className="roster-table">
+                    <thead>
+                      <tr>
+                        <th>School Name</th>
+                        <th>Code</th>
+                        <th>Status</th>
+                        <th>Students</th>
+                        <th>Tutors</th>
+                        <th>Real Sessions</th>
+                        <th>Avg Gain</th>
+                        <th>Last Activity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {platformSchools.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: "center", color: "#64748b", padding: "20px" }}>
+                            No schools active yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        platformSchools.map((sc) => (
+                          <tr key={sc.schoolId}>
+                            <td><strong>{sc.schoolName}</strong></td>
+                            <td><code>{sc.schoolCode}</code></td>
+                            <td>
+                              <span className={`status-chip ${sc.status === "active" ? "online" : "offline"}`}>
+                                {sc.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td>{sc.studentsCount}</td>
+                            <td>{sc.tutorsCount}</td>
+                            <td><strong>{sc.sessionsCount}</strong></td>
+                            <td>
+                              <span className="stat-badge gain">
+                                +{Math.round(sc.avgGain * 100)}%
+                              </span>
+                            </td>
+                            <td style={{ fontSize: "11px", color: "#64748b" }}>
+                              {new Date(sc.lastActivity).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

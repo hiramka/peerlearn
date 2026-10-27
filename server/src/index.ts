@@ -31,6 +31,13 @@ import {
 } from "./proof";
 import { resetDemoData, createGuestDemoToken, validateGuestDemoToken } from "./demo";
 import { broadcastSessionEvent, registerSSEClient, batchUploadEvents, getSessionEvents } from "./live";
+import { createLesson, updateLesson, publishLesson, getCurriculum } from "./content";
+import {
+  getTeacherTopicHeatmap,
+  getNoImprovementFlags,
+  getPlatformSchoolHealth,
+  generatePlatformImpactReport,
+} from "./dashboards";
 import type { SessionResult, SessionEvent } from "../../shared/types";
 
 const app = express();
@@ -392,6 +399,85 @@ app.get("/api/events", (req, res) => {
   const schoolId = (req.query.schoolId as string) || "s1";
   const sessionId = req.query.sessionId as string;
   res.json(getSessionEvents(schoolId, sessionId));
+});
+
+// ============================================================================
+// Phase 6: Content Authoring (CONT-1..3) & Dashboards (DASH-1..2)
+// ============================================================================
+
+// CONT-1 & CONT-3: Get curriculum (published for students, drafts optional for teachers)
+app.get("/api/content/lessons", (req, res) => {
+  const schoolId = req.query.schoolId as string;
+  const includeDrafts = req.query.includeDrafts === "true";
+  res.json(getCurriculum(schoolId, includeDrafts));
+});
+
+// CONT-1: Create new lesson draft
+app.post("/api/content/lessons", (req, res) => {
+  try {
+    const lesson = createLesson(req.body);
+    res.status(201).json({ ok: true, lesson });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// CONT-1: Update lesson draft
+app.put("/api/content/lessons/:topicId", (req, res) => {
+  try {
+    const lesson = updateLesson(Number(req.params.topicId), req.body);
+    res.json({ ok: true, lesson });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// CONT-2 (DoD): Publish lesson (bumps version and makes downloadable to students)
+app.post("/api/content/lessons/:topicId/publish", (req, res) => {
+  try {
+    const lesson = publishLesson(Number(req.params.topicId));
+    res.json({ ok: true, lesson, message: `Lesson "${lesson.title}" published as v${lesson.version}!` });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DASH-1: Topic struggle heatmap
+app.get("/api/teacher/struggle-heatmap", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  res.json(getTeacherTopicHeatmap(schoolId));
+});
+
+// DASH-1: No-improvement flags
+app.get("/api/teacher/no-improvement", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  res.json(getNoImprovementFlags(schoolId));
+});
+
+// DASH-1: Export cohort telemetry to CSV
+app.get("/api/teacher/export/csv", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  const realSessions = sessions.filter((s) => !s.is_demo);
+
+  let csv = "client_id,learner_id,tutor_id,topic_id,pre_score,post_score,gain,retention_score,at\n";
+  for (const s of realSessions) {
+    const gain = (s.post - s.pre).toFixed(2);
+    csv += `${s.client_id},${s.learnerId},${s.tutorId},${s.topicId},${s.pre},${s.post},${gain},${s.retention_score ?? ""},${s.at}\n`;
+  }
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename=peerlearn-${schoolId}-telemetry.csv`);
+  res.send(csv);
+});
+
+// DASH-2: Platform Admin School Health Table
+app.get("/api/platform/school-health", (_req, res) => {
+  res.json(getPlatformSchoolHealth());
+});
+
+// DASH-2 & DoD: Platform Impact Report (R5 demo data excluded)
+app.get("/api/platform/impact-report", (_req, res) => {
+  res.json(generatePlatformImpactReport());
 });
 
 const port = Number(process.env.PORT ?? 3001);
