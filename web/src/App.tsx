@@ -16,6 +16,7 @@ import type {
   TopicStruggle,
   Tutor,
 } from "../../shared/types";
+import { getTranslation, type SupportedLanguage } from "../../shared/i18n";
 import {
   cacheTopics,
   cachedTopics,
@@ -35,6 +36,9 @@ import {
   queueEvent,
   syncEventsOutbox,
   pendingEventsCount,
+  getStorageUsage,
+  clearOfflineCache,
+  type StorageStats,
 } from "./db";
 
 const LEARNER_ID = "l1";
@@ -266,6 +270,46 @@ export default function App() {
   const [newLessonExplanation, setNewLessonExplanation] = useState("Key rules for this topic.");
   const [platformSchools, setPlatformSchools] = useState<PlatformSchoolHealth[]>([]);
   const [platformReport, setPlatformReport] = useState<ImpactReport | null>(null);
+
+  // Phase 7: Polish - I18N, Accessibility, Storage & Certificates
+  const [lang, setLang] = useState<SupportedLanguage>(() => {
+    return (localStorage.getItem("peerlearn_lang") as SupportedLanguage) || "en";
+  });
+  const t = getTranslation(lang);
+  const [highContrast, setHighContrast] = useState(false);
+  const [lowDataMode, setLowDataMode] = useState(false);
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
+  const [showCertModal, setShowCertModal] = useState(false);
+  const [selectedCertTutor, setSelectedCertTutor] = useState<Tutor | null>(null);
+
+  const handleSetLanguage = (newLang: SupportedLanguage) => {
+    setLang(newLang);
+    localStorage.setItem("peerlearn_lang", newLang);
+  };
+
+  const loadStorageInfo = async () => {
+    const stats = await getStorageUsage();
+    setStorageStats(stats);
+  };
+
+  const handleClearCache = async () => {
+    await clearOfflineCache();
+    await loadStorageInfo();
+    setOffline(await offlineIds());
+    setMsg(t.cacheCleared);
+  };
+
+  useEffect(() => {
+    document.body.classList.toggle("high-contrast", highContrast);
+  }, [highContrast]);
+
+  useEffect(() => {
+    document.body.classList.toggle("low-data-mode", lowDataMode);
+  }, [lowDataMode]);
+
+  useEffect(() => {
+    loadStorageInfo();
+  }, [offline]);
 
   // Load cached offline session on mount (AUTH-8)
   useEffect(() => {
@@ -1272,10 +1316,55 @@ export default function App() {
             </div>
 
             <div className="dash-user-controls">
+              {/* Phase 7: Language Switcher, Accessibility & Storage */}
+              <div className="a11y-toolbar">
+                <div style={{ display: "flex", gap: "2px", background: "#f1f5f9", padding: "2px", borderRadius: "20px" }}>
+                  <button
+                    className={`lang-toggle-btn ${lang === "en" ? "active" : ""}`}
+                    onClick={() => handleSetLanguage("en")}
+                    aria-label="Switch interface to English"
+                  >
+                    EN
+                  </button>
+                  <button
+                    className={`lang-toggle-btn ${lang === "sw" ? "active" : ""}`}
+                    onClick={() => handleSetLanguage("sw")}
+                    aria-label="Badilisha lugha kuwa Kiswahili"
+                  >
+                    SW
+                  </button>
+                </div>
+                <button
+                  className={`lang-toggle-btn ${highContrast ? "active" : ""}`}
+                  onClick={() => setHighContrast(!highContrast)}
+                  title="Toggle High Contrast Mode for improved visibility (A11Y-1)"
+                  aria-pressed={highContrast}
+                >
+                  👁️ {highContrast ? "Normal" : "High Contrast"}
+                </button>
+                <button
+                  className={`lang-toggle-btn ${lowDataMode ? "active" : ""}`}
+                  onClick={() => setLowDataMode(!lowDataMode)}
+                  title="Toggle Low Data Mode without animations or heavy media (A11Y-1)"
+                  aria-pressed={lowDataMode}
+                >
+                  📶 {lowDataMode ? "Low Data: ON" : t.lowDataMode}
+                </button>
+                {storageStats && (
+                  <button
+                    className="lang-toggle-btn"
+                    onClick={handleClearCache}
+                    title={`${storageStats.cachedLessonsCount} lesson packs cached (${storageStats.usageFormatted}). Click to clear storage (OFF-1).`}
+                  >
+                    🗑️ {storageStats.usageFormatted}
+                  </button>
+                )}
+              </div>
+
               {/* Online / Offline status */}
               <div className={`status-chip ${online ? "online" : "offline"}`}>
                 <span className="chip-dot" />
-                <span>{online ? "Online" : "Offline"}</span>
+                <span>{online ? t.online : t.offline}</span>
               </div>
 
               {/* Sync Assurance Button & Info */}
@@ -2698,6 +2787,19 @@ export default function App() {
                                     >
                                       {isSuspended ? "Reinstate" : "Suspend (SAFE-2)"}
                                     </button>
+                                    {isApproved && scoreVal && scoreVal >= 0.8 && (
+                                      <button
+                                        className="btn-small-reset"
+                                        onClick={() => {
+                                          setSelectedCertTutor(t);
+                                          setShowCertModal(true);
+                                        }}
+                                        style={{ borderColor: "#3b82f6", color: "#1d4ed8" }}
+                                        title="View Printable Peer Tutor Certificate (LATER item)"
+                                      >
+                                        📜 Certificate
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -3363,6 +3465,48 @@ export default function App() {
                 Submit Confidential Report (SAFE-4)
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================== */}
+      {/* Peer Tutor Certificate Modal (LATER item)                              */}
+      {/* ====================================================================== */}
+      {showCertModal && selectedCertTutor && (
+        <div className="auth-modal-overlay" onClick={() => setShowCertModal(false)}>
+          <div className="auth-modal-card" style={{ maxWidth: "620px" }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-x" onClick={() => setShowCertModal(false)}>✕</button>
+            <div className="cert-card-wrapper">
+              <div className="cert-header">REPUBLIC OF KENYA • MINISTRY OF EDUCATION PILOT</div>
+              <h2 className="cert-title">PEER TUTOR CERTIFICATE</h2>
+              <div className="cert-subtitle">Certificate of Pedagogical & Subject Mastery</div>
+              <div className="cert-recipient">{selectedCertTutor.name}</div>
+              <p className="cert-body">
+                Has successfully demonstrated mastery of Kenyan Secondary Curricula (Form {selectedCertTutor.grade}), completed peer instruction guidelines, and attained teacher verification with an evaluation score &ge; 80%.
+              </p>
+              <div className="cert-footer">
+                <div>
+                  <strong>School Tenant</strong><br/>
+                  {authSession?.user.school_code || "ALLIANCE"}
+                </div>
+                <div>
+                  <strong>Status</strong><br/>
+                  <span style={{ color: "#10b981", fontWeight: "700" }}>✓ Certified Active</span>
+                </div>
+                <div>
+                  <strong>Date Verified</strong><br/>
+                  {new Date().toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button className="action-pill-btn" onClick={() => setShowCertModal(false)}>
+                Close
+              </button>
+              <button className="action-pill-btn primary" onClick={() => window.print()}>
+                🖨️ Print Certificate
+              </button>
+            </div>
           </div>
         </div>
       )}

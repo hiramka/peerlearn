@@ -167,3 +167,53 @@ export const pendingEventsCount = async (): Promise<number> => {
   }
 };
 
+// ============================================================================
+// Phase 7: Storage Management (OFF-1, Polish)
+// ============================================================================
+
+export interface StorageStats {
+  usageBytes: number;
+  usageFormatted: string;
+  cachedLessonsCount: number;
+}
+
+export async function getStorageUsage(): Promise<StorageStats> {
+  const db = await dbp;
+  const cachedLessonsCount = await db.count("lessons");
+  let usageBytes = 0;
+
+  if (typeof navigator !== "undefined" && navigator.storage && navigator.storage.estimate) {
+    try {
+      const est = await navigator.storage.estimate();
+      usageBytes = est.usage || 0;
+    } catch {}
+  }
+
+  // Fallback estimate if API returns 0
+  if (!usageBytes) {
+    usageBytes = cachedLessonsCount * 12500 + 4096; // ~12.5KB per cached lesson + DB overhead
+  }
+
+  const usageFormatted =
+    usageBytes > 1024 * 1024
+      ? `${(usageBytes / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.round(usageBytes / 1024)} KB`;
+
+  return { usageBytes, usageFormatted, cachedLessonsCount };
+}
+
+export async function clearOfflineCache(): Promise<void> {
+  const db = await dbp;
+  await db.clear("lessons");
+  if (typeof caches !== "undefined") {
+    try {
+      const keys = await caches.keys();
+      for (const k of keys) {
+        if (k.includes("workbox") || k.includes("peerlearn")) {
+          await caches.delete(k);
+        }
+      }
+    } catch {}
+  }
+}
+
