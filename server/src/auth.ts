@@ -386,3 +386,74 @@ export function approveSchoolApplication(applicationId: string): { ok: boolean; 
   schoolsStore.push(school);
   return { ok: true, school };
 }
+
+// ============================================================================
+// Kenya Data Protection Act 2019 (Section 9): Student Data Portability & Erasure
+// ============================================================================
+
+export function exportStudentData(studentId: string): {
+  ok: boolean;
+  data?: {
+    profile: StudentProfile | null;
+    hasCredentials: boolean;
+    credentialsLocked: boolean;
+    auditRecordsCount: number;
+    exportedAt: string;
+  };
+  error?: string;
+} {
+  const profile = profilesStore.find((p) => p.id === studentId || p.reg_number === studentId);
+  if (!profile) {
+    return { ok: false, error: "Student profile not found." };
+  }
+
+  const cred = studentCredentialsStore.find((c) => c.userId === profile.id);
+  const auditLogs = auditLogsStore.filter((a) => a.detail?.student_id === profile.id);
+
+  return {
+    ok: true,
+    data: {
+      profile,
+      hasCredentials: !!cred,
+      credentialsLocked: !!(cred?.lockedUntil && cred.lockedUntil > new Date()),
+      auditRecordsCount: auditLogs.length,
+      exportedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export function eraseStudentData(studentId: string, actorId: string): {
+  ok: boolean;
+  message?: string;
+  error?: string;
+} {
+  const profileIndex = profilesStore.findIndex((p) => p.id === studentId || p.reg_number === studentId);
+  if (profileIndex === -1) {
+    return { ok: false, error: "Student profile not found." };
+  }
+
+  const profile = profilesStore[profileIndex];
+
+  // Remove credential secrets
+  const credIndex = studentCredentialsStore.findIndex((c) => c.userId === profile.id);
+  if (credIndex !== -1) {
+    studentCredentialsStore.splice(credIndex, 1);
+  }
+
+  // Anonymize personal identifiers to comply with DPA while maintaining statistical integrity
+  profile.full_name = "Anonymized Learner";
+  profile.reg_number = `ERASED-${Date.now()}`;
+  profile.guardian_consent_at = undefined;
+
+  // Log erasure action
+  auditLogsStore.push({
+    id: auditLogsStore.length + 1,
+    schoolId: profile.school_id,
+    actorId,
+    action: "student_data_erasure",
+    detail: { student_id: profile.id, anonymizedAt: new Date().toISOString() },
+    createdAt: new Date().toISOString(),
+  });
+
+  return { ok: true, message: "Student personal data successfully erased and anonymized under Kenya DPA." };
+}

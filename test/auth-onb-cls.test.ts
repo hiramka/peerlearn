@@ -6,6 +6,8 @@ import {
   resetStudentPin,
   submitSchoolApplication,
   approveSchoolApplication,
+  exportStudentData,
+  eraseStudentData,
   schoolsStore,
   profilesStore,
   studentCredentialsStore,
@@ -203,4 +205,33 @@ describe("Phase 2: Registration, Login & Multi-Tenancy (AUTH, CLS, ONB)", () => 
     const registered = schoolsStore.find((s) => s.id === approveRes.school?.id);
     expect(registered).toBeDefined();
   });
+
+  it("Kenya DPA 2019 (Section 9): Exports student data and erases personal data upon request", () => {
+    // 1. Create student
+    const importRes = importStudentsCSV(schoolA.id, [
+      { reg_number: "ADM-777", full_name: "Amina Hassan", grade: 2, class_stream: "2East" },
+    ]);
+    const studentReg = importRes.results[0].reg_number;
+
+    // 2. Export student data (Portability)
+    const exportRes = exportStudentData(studentReg);
+    expect(exportRes.ok).toBe(true);
+    expect(exportRes.data?.profile?.full_name).toBe("Amina Hassan");
+    expect(exportRes.data?.hasCredentials).toBe(true);
+
+    // 3. Erase student data (Right to Erasure)
+    const eraseRes = eraseStudentData(studentReg, "principal-1");
+    expect(eraseRes.ok).toBe(true);
+
+    // 4. Verify anonymization
+    const profileAfter = profilesStore.find((p) => p.id === exportRes.data?.profile?.id);
+    expect(profileAfter?.full_name).toBe("Anonymized Learner");
+    expect(profileAfter?.reg_number).toContain("ERASED-");
+
+    // 5. Verify audit log entry
+    const audit = auditLogsStore.find((a) => a.action === "student_data_erasure" && a.detail?.student_id === profileAfter?.id);
+    expect(audit).toBeDefined();
+    expect(audit?.actorId).toBe("principal-1");
+  });
 });
+

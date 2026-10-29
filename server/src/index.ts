@@ -12,6 +12,8 @@ import {
   submitSchoolApplication,
   approveSchoolApplication,
   applicationsStore,
+  exportStudentData,
+  eraseStudentData,
 } from "./auth";
 import {
   approveTutorTopic,
@@ -215,6 +217,18 @@ app.get("/api/students", (req, res) => {
   const schoolId = req.query.schoolId as string;
   const filtered = profilesStore.filter((p) => !schoolId || p.school_id === schoolId);
   res.json(filtered);
+});
+
+// Kenya DPA 2019 (Section 9): Right to Data Portability & Right to Erasure
+app.get("/api/students/:id/export", (req, res) => {
+  const result = exportStudentData(req.params.id);
+  res.status(result.ok ? 200 : 404).json(result);
+});
+
+app.post("/api/students/:id/erase", (req, res) => {
+  const { actorId } = req.body;
+  const result = eraseStudentData(req.params.id, actorId || "school_admin");
+  res.status(result.ok ? 200 : 404).json(result);
 });
 
 // ONB-1 to ONB-4: School onboarding applications and tenant management
