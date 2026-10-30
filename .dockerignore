@@ -1,0 +1,9 @@
+node_modules
+.git
+dist
+coverage
+.system_generated
+.user_uploaded
+scratch
+*.log
+peerlearn.zip

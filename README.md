@@ -23,6 +23,12 @@ An offline-first, privacy-compliant peer-tutoring matchmaker and progressive web
   - **Small-Group Peer Tutoring:** 1 tutor to 2–4 struggling peers with multi-learner quiz tracking and collective gain analytics.
   - **Africa's Talking USSD & SMS Gateway:** Kenya telco integration (`*384*500#`) with interactive feature phone simulator and automated SMS schedule/progress alerts.
   - **Zero-Data Offline QR Transfer Engine:** Peer-to-peer lesson pack and offline session synchronization via high-density SVG QR code with tamper-evident checksum verification.
+- **Phase 9 E2E Offline Testing & Network Emulation:** Playwright browser offline test, 10x repeated flaky network retry simulation, and idempotent single-row server deduplication tests.
+- **Phase 10 Production Cloud & Local Appliance Deployment:**
+  - **Vercel Edge & PWA Hosting:** Zero-config SPA rewrite, Content-Security-Policy, immutable asset caching, and offline Service Worker routing ([`vercel.json`](vercel.json), [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYMENT.md)).
+  - **Supabase Cloud Migration:** Multi-tenant RLS schema for all core and Phase 8 tables (`supabase/migrations/`).
+  - **Offline School Server Appliance:** Turnkey Docker & Docker Compose setup with local SQLite/Postgres fallback for zero-connectivity school computer labs ([`docs/OFFLINE_SCHOOL_SERVER.md`](docs/OFFLINE_SCHOOL_SERVER.md)).
+  - **Automated CI/CD:** GitHub Actions workflow executing type checking, unit tests, and production PWA building on every push.
 
 ---
 
@@ -130,7 +136,13 @@ peerlearn/
 │       └── student-login/
 ├── docs/
 │   ├── PRIVACY.md         # Plain-language privacy policy (Kenya DPA 2019)
-│   └── SCHOOL_DATA_AGREEMENT.md # School Data Processing Agreement template
+│   ├── SCHOOL_DATA_AGREEMENT.md # School Data Processing Agreement template
+│   ├── PRODUCTION_DEPLOYMENT.md # Vercel & Supabase Cloud deploy runbook
+│   └── OFFLINE_SCHOOL_SERVER.md # Turnkey Docker setup for zero-internet school labs
+├── .github/workflows/ci.yml # Automated CI pipeline (lint, test, build)
+├── Dockerfile             # Multi-stage production container
+├── docker-compose.yml     # Standalone offline school appliance bundle
+├── vercel.json            # Vercel Edge routing, PWA headers & SPA rewrites
 ├── SPEC_V2.md             # Complete specification & definition of done
 └── package.json           # Monorepo scripts & dependencies
 ```

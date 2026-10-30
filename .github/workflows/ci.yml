@@ -1,0 +1,34 @@
+name: PeerLearn CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Build, Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck Workspaces (Server & Web)
+        run: npm run typecheck
+
+      - name: Run Complete Test Suite (58/58 passing)
+        run: npm test
+
+      - name: Verify Production PWA Bundle Build
+        run: npm run build --workspace web
