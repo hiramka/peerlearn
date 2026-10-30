@@ -68,6 +68,29 @@ import {
   generateQRPayload,
   parseAndIngestQRPayload,
 } from "./qr";
+import {
+  getForumQuestions,
+  getQuestionById,
+  createForumQuestion,
+  createForumAnswer,
+  voteForumItem,
+  acceptForumAnswer,
+} from "./forum";
+import {
+  getSchoolNotices,
+  createSchoolNotice,
+  togglePinSchoolNotice,
+  deleteSchoolNotice,
+} from "./notices";
+import {
+  getCATRecords,
+  upsertCATRecord,
+  computeCATImpactCorrelation,
+} from "./gradebook";
+import {
+  getPastPapers,
+  getPastPaperById,
+} from "./pastpapers";
 import type { SessionResult, SessionEvent } from "../../shared/types";
 
 const app = express();
@@ -715,6 +738,178 @@ app.post("/api/qr/decode", (req, res) => {
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ==========================================
+// Phase 14: School LMS Extension Endpoints
+// ==========================================
+
+// 1. Asynchronous Subject Q&A Forum
+app.get("/api/forum/questions", (req, res) => {
+  const schoolId = String(req.query.schoolId || "s1");
+  const subject = req.query.subject ? String(req.query.subject) : undefined;
+  const grade = req.query.grade ? Number(req.query.grade) : undefined;
+  const resolved = req.query.resolved !== undefined ? req.query.resolved === "true" : undefined;
+  const search = req.query.search ? String(req.query.search) : undefined;
+
+  const questions = getForumQuestions(schoolId, { subject, grade, resolved, search });
+  res.json(questions);
+});
+
+app.get("/api/forum/questions/:id", (req, res) => {
+  const result = getQuestionById(req.params.id);
+  if (!result.question) return res.status(404).json({ error: "Question not found" });
+  res.json(result);
+});
+
+app.post("/api/forum/questions", (req, res) => {
+  const { schoolId, authorId, authorName, authorRole, grade, subject, topicId, title, content, formulaOrSnippet } = req.body;
+  if (!schoolId || !authorId || !title || !content || !subject) {
+    return res.status(400).json({ error: "schoolId, authorId, title, content, and subject are required." });
+  }
+  const result = createForumQuestion({
+    schoolId,
+    authorId,
+    authorName: authorName || "Anonymous Learner",
+    authorRole: authorRole || "learner",
+    grade: Number(grade) || 2,
+    subject,
+    topicId: topicId ? Number(topicId) : undefined,
+    title,
+    content,
+    formulaOrSnippet,
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.status(201).json(result.question);
+});
+
+app.post("/api/forum/answers", (req, res) => {
+  const { questionId, schoolId, authorId, authorName, authorRole, isCertifiedTutor, content, steps } = req.body;
+  if (!questionId || !schoolId || !authorId || !content) {
+    return res.status(400).json({ error: "questionId, schoolId, authorId, and content are required." });
+  }
+  const result = createForumAnswer({
+    questionId,
+    schoolId,
+    authorId,
+    authorName: authorName || "Peer Tutor",
+    authorRole: authorRole || "tutor",
+    isCertifiedTutor: !!isCertifiedTutor,
+    content,
+    steps,
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.status(201).json(result.answer);
+});
+
+app.post("/api/forum/vote", (req, res) => {
+  const { type, targetId, userId } = req.body;
+  if (!type || !targetId || !userId) {
+    return res.status(400).json({ error: "type ('question'|'answer'), targetId, and userId are required." });
+  }
+  const result = voteForumItem(type, targetId, userId);
+  res.json(result);
+});
+
+app.post("/api/forum/accept", (req, res) => {
+  const { questionId, answerId, actorId } = req.body;
+  if (!questionId || !answerId || !actorId) {
+    return res.status(400).json({ error: "questionId, answerId, and actorId are required." });
+  }
+  const result = acceptForumAnswer(questionId, answerId, actorId);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+// 2. School Notice Board
+app.get("/api/notices", (req, res) => {
+  const schoolId = String(req.query.schoolId || "s1");
+  const grade = req.query.grade ? Number(req.query.grade) : undefined;
+  res.json(getSchoolNotices(schoolId, grade));
+});
+
+app.post("/api/notices", (req, res) => {
+  const { schoolId, authorId, authorName, authorRole, title, category, targetGrades, content, isPinned, broadcastSMS } = req.body;
+  if (!schoolId || !authorId || !title || !content) {
+    return res.status(400).json({ error: "schoolId, authorId, title, and content are required." });
+  }
+  const result = createSchoolNotice({
+    schoolId,
+    authorId,
+    authorName: authorName || "School Administration",
+    authorRole: authorRole || "school_admin",
+    title,
+    category: category || "general",
+    targetGrades: Array.isArray(targetGrades) ? targetGrades : [],
+    content,
+    isPinned: !!isPinned,
+    broadcastSMS: !!broadcastSMS,
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.status(201).json(result.notice);
+});
+
+app.patch("/api/notices/:id/pin", (req, res) => {
+  const { schoolId, isPinned, actorId } = req.body;
+  if (!schoolId || typeof isPinned !== "boolean" || !actorId) {
+    return res.status(400).json({ error: "schoolId, isPinned, and actorId are required." });
+  }
+  const result = togglePinSchoolNotice(schoolId, req.params.id, isPinned, actorId);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+app.delete("/api/notices/:id", (req, res) => {
+  const schoolId = String(req.query.schoolId || "s1");
+  const actorId = String(req.query.actorId || "admin");
+  const result = deleteSchoolNotice(schoolId, req.params.id, actorId);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+// 3. Teacher Continuous Assessment Test (CAT) Gradebook & Correlation
+app.get("/api/gradebook/records", (req, res) => {
+  const schoolId = String(req.query.schoolId || "s1");
+  const subject = req.query.subject ? String(req.query.subject) : undefined;
+  const grade = req.query.grade ? Number(req.query.grade) : undefined;
+  const term = req.query.term ? String(req.query.term) : undefined;
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  res.json(getCATRecords(schoolId, { subject, grade, term, year }));
+});
+
+app.post("/api/gradebook/records", (req, res) => {
+  const { schoolId, actorId, record } = req.body;
+  if (!schoolId || !actorId || !record) {
+    return res.status(400).json({ error: "schoolId, actorId, and record are required." });
+  }
+  const result = upsertCATRecord(schoolId, actorId, record);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result.record);
+});
+
+app.get("/api/gradebook/correlation", (req, res) => {
+  const schoolId = String(req.query.schoolId || "s1");
+  const subject = String(req.query.subject || "Mathematics");
+  const grade = Number(req.query.grade || 2);
+  const term = String(req.query.term || "Term 2");
+  const correlation = computeCATImpactCorrelation(schoolId, subject, grade, term);
+  res.json(correlation);
+});
+
+// 4. KNEC Past Papers & Revision Schemes
+app.get("/api/pastpapers", (req, res) => {
+  const subject = req.query.subject ? String(req.query.subject) : undefined;
+  const level = req.query.level ? (String(req.query.level) as "KCSE" | "CBC") : undefined;
+  const grade = req.query.grade ? Number(req.query.grade) : undefined;
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const search = req.query.search ? String(req.query.search) : undefined;
+  res.json(getPastPapers({ subject, level, grade, year, search }));
+});
+
+app.get("/api/pastpapers/:id", (req, res) => {
+  const paper = getPastPaperById(req.params.id);
+  if (!paper) return res.status(404).json({ error: "Past paper not found" });
+  res.json(paper);
 });
 
 const port = Number(process.env.PORT ?? 3001);

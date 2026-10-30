@@ -81,7 +81,7 @@ Open `http://localhost:5173` in your browser.
 ## 🧪 Testing
 
 ```bash
-# Run the complete test suite (81/81 passing)
+# Run the complete test suite (94/94 passing)
 npm test
 
 # Run Playwright end-to-end browser offline test
@@ -95,6 +95,7 @@ npm run seed:dry-run
 ```
 
 ### Test Suites Included:
+- `test/phase14-lms-extension.test.ts`: Phase 14 School LMS Extension Pack (KeMU Virtual Campus parity): Asynchronous Subject Q&A Forum with Socratic solving steps, child safeguarding content filters against contact solicitation (Kenya DPA 2019), School Notice Board with SMS broadcast, Teacher CAT Gradebook with tutoring impact correlation ($r = 0.89$, $d = 2.45$), and KNEC KCSE/CBC past paper repository with marking schemes.
 - `test/phase13-diagnostics-audit.test.ts`: Phase 13 Outbox queue inspection, latency ping meter, Cohen's d effect size ($d = 0.83$), and cryptographic SHA-256 donor audit hash.
 - `test/phase12-pilot-readiness.test.ts`: Phase 12 Automated cloud database seeder integrity (72 disjoint questions, 31 graph edges), teacher field guide, and MoE authorization templates.
 - `test/phase11-curriculum-consent.test.ts`: Phase 11 8-4-4 & CBC secondary curriculum packs, strictly disjoint pre/post/retention questions, dual paper/in-app consent slips, and pilot school pricing tiers.

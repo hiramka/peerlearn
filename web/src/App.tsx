@@ -49,6 +49,10 @@ import { QRHandoffModal } from "./components/QRHandoffModal";
 import { PrintableConsentSlipModal } from "./components/PrintableConsentSlipModal";
 import { NetworkDiagnosticsModal } from "./components/NetworkDiagnosticsModal";
 import { DonorImpactReportModal } from "./components/DonorImpactReportModal";
+import { ForumQnAView } from "./components/ForumQnAView";
+import { SchoolNoticeBoardModal } from "./components/SchoolNoticeBoardModal";
+import { TeacherCATGradebookModal } from "./components/TeacherCATGradebookModal";
+import { PastPaperLibraryModal } from "./components/PastPaperLibraryModal";
 
 const LEARNER_ID = "l1";
 type Stage = "browse" | "pre" | "lesson" | "post" | "retention" | "done";
@@ -318,6 +322,12 @@ export default function App() {
   // Phase 13: Field Diagnostics, Sync Queue Inspector & Donor Audit Verification
   const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
   const [showDonorReportModal, setShowDonorReportModal] = useState(false);
+
+  // Phase 14: School LMS Extension (KeMU Virtual Campus Parity)
+  const [showForumModal, setShowForumModal] = useState(false);
+  const [showNoticeBoardModal, setShowNoticeBoardModal] = useState(false);
+  const [showGradebookModal, setShowGradebookModal] = useState(false);
+  const [showPastPaperModal, setShowPastPaperModal] = useState(false);
 
   const handleSetLanguage = (newLang: SupportedLanguage) => {
     setLang(newLang);
@@ -1500,6 +1510,35 @@ export default function App() {
                   title="View Official Cryptographic Donor Impact Report (Phase 13)"
                 >
                   📊 Donor Report
+                </button>
+                {/* Phase 14: School LMS Extension Quick Buttons */}
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowForumModal(true)}
+                  title="Subject Q&A & Peer Homework Forum (Phase 14)"
+                >
+                  💬 Q&A Forum
+                </button>
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowNoticeBoardModal(true)}
+                  title="School Notice Board & Academic Bulletin (Phase 14)"
+                >
+                  📢 Notices
+                </button>
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowGradebookModal(true)}
+                  title="Teacher CAT Gradebook & Tutoring Impact Engine (Phase 14)"
+                >
+                  📈 CAT Gradebook
+                </button>
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowPastPaperModal(true)}
+                  title="KNEC KCSE & CBC Past Paper Repository (Phase 14)"
+                >
+                  📚 Past Papers
                 </button>
               </div>
 
@@ -3819,6 +3858,47 @@ export default function App() {
         onClose={() => setShowDonorReportModal(false)}
         schoolId={authSession?.user.school_id}
       />
+
+      {/* Phase 14: Asynchronous Subject Q&A Forum Modal */}
+      {showForumModal && (
+        <ForumQnAView
+          schoolId={authSession?.user.school_id || "s1"}
+          userId={authSession?.user.id || LEARNER_ID}
+          userName={authSession?.user.full_name || "Amina K."}
+          userRole={authSession?.user.role || "learner"}
+          userGrade={authSession?.user.grade || 2}
+          onClose={() => setShowForumModal(false)}
+        />
+      )}
+
+      {/* Phase 14: School Notice Board & Academic Bulletin Modal */}
+      {showNoticeBoardModal && (
+        <SchoolNoticeBoardModal
+          schoolId={authSession?.user.school_id || "s1"}
+          userId={authSession?.user.id || "t-admin"}
+          userName={authSession?.user.full_name || "Mr. Otieno"}
+          userRole={authSession?.user.role || "teacher"}
+          userGrade={authSession?.user.grade}
+          onClose={() => setShowNoticeBoardModal(false)}
+        />
+      )}
+
+      {/* Phase 14: Teacher CAT Gradebook & Tutoring Impact Modal */}
+      {showGradebookModal && (
+        <TeacherCATGradebookModal
+          schoolId={authSession?.user.school_id || "s1"}
+          userId={authSession?.user.id || "teacher-1"}
+          userRole={authSession?.user.role || "teacher"}
+          onClose={() => setShowGradebookModal(false)}
+        />
+      )}
+
+      {/* Phase 14: KNEC Past Paper & Scheme of Work Repository Modal */}
+      {showPastPaperModal && (
+        <PastPaperLibraryModal
+          onClose={() => setShowPastPaperModal(false)}
+        />
+      )}
     </div>
   );
 }

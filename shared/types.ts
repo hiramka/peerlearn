@@ -466,4 +466,116 @@ export interface GroupSessionResult {
   at: string;
 }
 
+// Phase 14: School LMS Extension Types (KeMU Virtual Campus parity)
+
+export interface ForumQuestion {
+  id: string;
+  schoolId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: SchoolRole;
+  grade: number; // 8 = Grade 8, 1 = Form 1, 2 = Form 2, 3 = Form 3, 4 = Form 4
+  subject: string; // "Mathematics", "Physics", "Chemistry", "Biology", etc.
+  topicId?: number;
+  title: string;
+  content: string;
+  formulaOrSnippet?: string;
+  upvotes: number;
+  answersCount: number;
+  isResolved: boolean;
+  acceptedAnswerId?: string;
+  flagged?: boolean;
+  flagReason?: string;
+  createdAt: string;
+}
+
+export interface ForumAnswer {
+  id: string;
+  questionId: string;
+  schoolId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: SchoolRole;
+  isCertifiedTutor?: boolean;
+  content: string;
+  steps?: string[]; // Socratic steps
+  upvotes: number;
+  isAccepted: boolean;
+  flagged?: boolean;
+  flagReason?: string;
+  createdAt: string;
+}
+
+export interface SchoolNotice {
+  id: string;
+  schoolId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: SchoolRole;
+  title: string;
+  category: "academic" | "exam_timetable" | "urgent" | "general";
+  targetGrades: number[]; // [] means all grades
+  content: string;
+  isPinned: boolean;
+  expiresAt?: string;
+  smsBroadcasted?: boolean;
+  createdAt: string;
+}
+
+export interface CATScoreRecord {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  regNumber: string;
+  studentName: string;
+  grade: number;
+  subject: string;
+  term: "Term 1" | "Term 2" | "Term 3";
+  year: number;
+  cat1Score: number; // out of 30
+  cat2Score: number; // out of 30
+  examScore: number; // out of 100
+  totalPercent: number; // weighted: cat1*0.15 + cat2*0.15 + exam*0.7
+  tutoringHoursReceived: number; // correlated from peer tutoring sessions
+  tutoringGainAvg: number; // correlated avg gain
+}
+
+export interface CATImpactCorrelation {
+  schoolId: string;
+  subject: string;
+  grade: number;
+  term: string;
+  sampleSize: number;
+  tutoredCount: number;
+  nonTutoredCount: number;
+  tutoredAvgCAT: number;
+  nonTutoredAvgCAT: number;
+  absoluteLift: number;
+  relativeLiftPercent: number;
+  correlationCoefficient: number; // Pearson r between tutoring hours and CAT total
+  cohensD: number;
+  statisticallySignificant: boolean;
+  narrative: string;
+}
+
+export interface PastPaperResource {
+  id: string;
+  title: string;
+  subject: string;
+  level: "KCSE" | "CBC";
+  grade: number;
+  year: number;
+  paperNumber: 1 | 2 | 3;
+  term?: string;
+  fileSize: string;
+  hasMarkingScheme: boolean;
+  sampleQuestions: Array<{
+    qNumber: string;
+    text: string;
+    marks: number;
+    topicId?: number;
+    solution: string;
+  }>;
+}
+
 
