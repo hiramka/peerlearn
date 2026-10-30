@@ -64,14 +64,20 @@ Open `http://localhost:5173` in your browser.
 ## 🧪 Testing
 
 ```bash
-# Run the complete test suite (56/56 passing)
+# Run the complete test suite (58/58 passing)
 npm test
+
+# Run Playwright end-to-end browser offline test
+npm run test:e2e
 
 # Check TypeScript types across both server and web workspaces
 npm run typecheck
 ```
 
 ### Test Suites Included:
+- `test/e2e-offline.test.ts`: Phase 9 End-to-end offline student session, flaky network 10x repeated sync, and idempotent single-row server deduplication.
+- `test/playwright/offline-session.spec.ts`: Phase 9 Playwright headless browser offline mode test (SPEC_V2 Section 7).
+- `test/phase8-later.test.ts`: Tutor training micro-lessons, certified badges, adaptive knowledge graph, group sessions, Africa's Talking USSD/SMS, and zero-data QR handoff checksums.
 - `test/matching.test.ts`: Explainable matching weights, hard filters, and top-3 limits.
 - `test/auth-onb-cls.test.ts`: Multi-tenant isolation, 5-attempt PIN lockout, teacher reset, CSV import, and DPA export/erase.
 - `test/safeguarding.test.ts`: Tutor approval requirement, suspensions, problem reports, guardian consent, audit logs.
@@ -79,7 +85,6 @@ npm run typecheck
 - `test/demo-live.test.ts`: Demo re-seed, guest access tokens, SSE real-time events, offline outbox queues.
 - `test/dashboards-content.test.ts`: Topic struggle heatmap, lesson publishing version bumps, student pack draft exclusions, donor impact reports.
 - `test/i18n-a11y.test.ts`: English/Kiswahili dictionary key parity, fallback behavior, storage calculation, certificate eligibility.
-- `test/phase8-later.test.ts`: Tutor training micro-lessons, certified badges, adaptive knowledge graph, group sessions, Africa's Talking USSD/SMS, and zero-data QR handoff checksums.
 
 ---
 
