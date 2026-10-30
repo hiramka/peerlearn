@@ -12,7 +12,9 @@
     "dev:web": "npm run dev --workspace web",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web"
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
+    "seed:cloud": "tsx server/src/scripts/seed-cloud-db.ts",
+    "seed:dry-run": "tsx server/src/scripts/seed-cloud-db.ts --dry-run"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

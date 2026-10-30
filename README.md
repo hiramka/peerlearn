@@ -33,6 +33,10 @@ An offline-first, privacy-compliant peer-tutoring matchmaker and progressive web
   - **Kenyan Secondary Curriculum Bank (8-4-4 & CBC):** 8 comprehensive topic packs across Mathematics, Biology, Physics, Chemistry, and CBC Junior Secondary Integrated Science with 100% disjoint pre/post/retention quizzes.
   - **Dual-Track Guardian Consent (SPEC_V2 10.5):** Official Ministry of Education & Kenya DPA 2019 printable paper consent slip with tamper-evident serials + in-app digital consent verification.
   - **School Pilot Tier Management (SPEC_V2 10.2/10.4):** Tier structure for Standard Pilot (KES 15,000/term), Sponsor-Subsidized Partner (Safaricom / Equity Foundation), and Free Sandbox.
+- **Phase 12 Field Pilot Launch & School Operations Pack:**
+  - **Teacher Field Operations Guide:** Practical 8-week school pilot implementation timeline, lab provisioning, and 20-minute session management ([`docs/TEACHER_PILOT_GUIDE.md`](docs/TEACHER_PILOT_GUIDE.md)).
+  - **Ministry of Education & Board Pack:** Formal County Director of Education (CDE) submission templates, Board of Management (BOM) adoption resolutions, and DPA 2019 minor protection compliance schedule ([`docs/MOE_PILOT_AUTHORIZATION.md`](docs/MOE_PILOT_AUTHORIZATION.md)).
+  - **Automated Cloud Database Seeder:** CLI script to populate remote Supabase Postgres with curriculum, schools, and adaptive graph edges (`npm run seed:cloud`, `npm run seed:dry-run`).
 
 ---
 
@@ -74,7 +78,7 @@ Open `http://localhost:5173` in your browser.
 ## 🧪 Testing
 
 ```bash
-# Run the complete test suite (71/71 passing)
+# Run the complete test suite (76/76 passing)
 npm test
 
 # Run Playwright end-to-end browser offline test
@@ -82,9 +86,13 @@ npm run test:e2e
 
 # Check TypeScript types across both server and web workspaces
 npm run typecheck
+
+# Execute cloud database seeder in dry-run mode
+npm run seed:dry-run
 ```
 
 ### Test Suites Included:
+- `test/phase12-pilot-readiness.test.ts`: Phase 12 Automated cloud database seeder integrity (72 disjoint questions, 31 graph edges), teacher field guide, and MoE authorization templates.
 - `test/phase11-curriculum-consent.test.ts`: Phase 11 8-4-4 & CBC secondary curriculum packs, strictly disjoint pre/post/retention questions, dual paper/in-app consent slips, and pilot school pricing tiers.
 - `test/e2e-offline.test.ts`: Phase 9 End-to-end offline student session, flaky network 10x repeated sync, and idempotent single-row server deduplication.
 - `test/playwright/offline-session.spec.ts`: Phase 9 Playwright headless browser offline mode test (SPEC_V2 Section 7).
@@ -116,7 +124,9 @@ peerlearn/
 │   │   ├── demo.ts        # Sub-second demo wipe & guest session tokens
 │   │   ├── live.ts        # Real-time SSE broadcasting & offline event batch upload
 │   │   ├── content.ts     # Lesson authoring & publishing version bumps
-│   │   └── dashboards.ts  # Struggle heatmaps, no-improvement alerts, donor impact reports
+│   │   ├── dashboards.ts  # Struggle heatmaps, no-improvement alerts, donor impact reports
+│   │   └── scripts/
+│   │       └── seed-cloud-db.ts # Automated remote Supabase seeder (Phase 12)
 ├── web/
 │   ├── src/
 │   │   ├── App.tsx        # Single-page application (Learner, Tutor, Teacher, Platform views)
@@ -143,7 +153,9 @@ peerlearn/
 │   ├── PRIVACY.md         # Plain-language privacy policy (Kenya DPA 2019)
 │   ├── SCHOOL_DATA_AGREEMENT.md # School Data Processing Agreement template
 │   ├── PRODUCTION_DEPLOYMENT.md # Vercel & Supabase Cloud deploy runbook
-│   └── OFFLINE_SCHOOL_SERVER.md # Turnkey Docker setup for zero-internet school labs
+│   ├── OFFLINE_SCHOOL_SERVER.md # Turnkey Docker setup for zero-internet school labs
+│   ├── TEACHER_PILOT_GUIDE.md   # Practical 8-week school pilot implementation timeline
+│   └── MOE_PILOT_AUTHORIZATION.md # County Director of Education submission & BOM resolutions
 ├── .github/workflows/ci.yml # Automated CI pipeline (lint, test, build)
 ├── Dockerfile             # Multi-stage production container
 ├── docker-compose.yml     # Standalone offline school appliance bundle
