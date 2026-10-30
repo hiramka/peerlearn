@@ -17,6 +17,12 @@ An offline-first, privacy-compliant peer-tutoring matchmaker and progressive web
 - **Teacher Dashboards & Content Authoring (DASH-1, CONT-1..3):** Topic struggle heatmaps, no-improvement session alerts, teacher lesson draft editor, version bump publishing, and donor impact reports strictly excluding demo data (R5).
 - **Localization & Accessibility (I18N-1, A11Y-1):** Complete bilingual support for English (`en`) and Kiswahili (`sw`), High-Contrast mode, Low-Data mode for 2G/3G connectivity, storage management with cache clearing (`OFF-1`), and printable Peer Tutor Certificates.
 - **Data Protection Act (Kenya DPA 2019):** Full compliance with children's data provisions, plain-language privacy policy ([`docs/PRIVACY.md`](docs/PRIVACY.md)), school data processing agreement ([`docs/SCHOOL_DATA_AGREEMENT.md`](docs/SCHOOL_DATA_AGREEMENT.md)), and student data export & erasure endpoints (`GET /api/students/:id/export`, `POST /api/students/:id/erase`).
+- **Phase 8 LATER Extensions:**
+  - **Tutor Pedagogical Training & Certification:** 4 interactive micro-modules (Socratic questioning, growth mindset, pacing, safeguarding), scenario assessment, and verified Certified Peer Tutor badge granting +10 pts in matching.
+  - **Adaptive Knowledge Graph:** Form 1–4 prerequisite graph with automated remediation (<50%), reinforcement (50–79%), and progression (≥80%) routing.
+  - **Small-Group Peer Tutoring:** 1 tutor to 2–4 struggling peers with multi-learner quiz tracking and collective gain analytics.
+  - **Africa's Talking USSD & SMS Gateway:** Kenya telco integration (`*384*500#`) with interactive feature phone simulator and automated SMS schedule/progress alerts.
+  - **Zero-Data Offline QR Transfer Engine:** Peer-to-peer lesson pack and offline session synchronization via high-density SVG QR code with tamper-evident checksum verification.
 
 ---
 
@@ -58,7 +64,7 @@ Open `http://localhost:5173` in your browser.
 ## 🧪 Testing
 
 ```bash
-# Run the complete test suite (41/41 passing)
+# Run the complete test suite (56/56 passing)
 npm test
 
 # Check TypeScript types across both server and web workspaces
@@ -73,6 +79,7 @@ npm run typecheck
 - `test/demo-live.test.ts`: Demo re-seed, guest access tokens, SSE real-time events, offline outbox queues.
 - `test/dashboards-content.test.ts`: Topic struggle heatmap, lesson publishing version bumps, student pack draft exclusions, donor impact reports.
 - `test/i18n-a11y.test.ts`: English/Kiswahili dictionary key parity, fallback behavior, storage calculation, certificate eligibility.
+- `test/phase8-later.test.ts`: Tutor training micro-lessons, certified badges, adaptive knowledge graph, group sessions, Africa's Talking USSD/SMS, and zero-data QR handoff checksums.
 
 ---
 

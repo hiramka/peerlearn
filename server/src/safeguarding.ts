@@ -49,6 +49,8 @@ export function logSafeguardingAudit(school_id: string, actor_id: string, action
   return entry;
 }
 
+export const logAudit = logSafeguardingAudit;
+
 // SAFE-1: Approve or Revoke Tutor for a specific topic
 export function approveTutorTopic(actorId: string, schoolId: string, tutorId: string, topicId: number, approved: boolean) {
   const existing = tutorApprovalsStore.find((a) => a.tutor_id === tutorId && a.topic_id === topicId);

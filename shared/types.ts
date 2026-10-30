@@ -93,6 +93,8 @@ export interface Tutor extends Person {
   verifiedScore: Record<number, number>; // topicId -> 0..1
   teacherApproved?: Record<number, boolean>; // topicId -> boolean (SAFE-1)
   isSuspended?: boolean; // tutor suspension (SAFE-2)
+  trainingCompleted?: boolean; // LATER: Pedagogical certification badge
+  completedModules?: string[];
   activeMatches: number;
   avgGain: number; // average (post - pre), 0..1, learned from past sessions
 }
@@ -315,3 +317,106 @@ export interface ImpactReport {
   demoExcluded: true;
   generatedAt: string;
 }
+
+// ============================================================================
+// Phase 8: LATER Items (Africa's Talking SMS/USSD, QR Handoff, Group Sessions,
+// Adaptive Practice Prerequisite Graph, Tutor Training Micro-Lessons)
+// ============================================================================
+
+export interface TutorTrainingModule {
+  id: string;
+  title: string;
+  subtitle: string;
+  principles: string[];
+  scenario: string;
+  quiz: {
+    question: string;
+    options: string[];
+    correctAnswer: number;
+    explanation: string;
+  };
+}
+
+export interface TutorTrainingProgress {
+  tutorId: string;
+  completedModuleIds: string[];
+  certifiedBadge: boolean;
+  certifiedAt?: string;
+}
+
+export interface TopicPrerequisiteNode {
+  topicId: number;
+  topicName: string;
+  subject: string;
+  grade: number;
+  prerequisiteTopicIds: number[];
+  progressionTopicIds: number[];
+}
+
+export interface AdaptiveRecommendation {
+  type: "remediation_prerequisite" | "progression_advance" | "reinforce_current";
+  reason: string;
+  recommendedTopicId: number;
+  recommendedTopicName: string;
+  recommendedGrade: number;
+}
+
+export interface GroupMatch {
+  id: string;
+  schoolId: string;
+  tutorId: string;
+  tutorName: string;
+  learnerIds: string[];
+  topicId: number;
+  topicName: string;
+  scheduledAt: string;
+  status: "scheduled" | "in_progress" | "completed" | "cancelled";
+}
+
+export interface USSDRequest {
+  sessionId: string;
+  serviceCode: string;
+  phoneNumber: string;
+  text: string;
+}
+
+export interface USSDResponse {
+  message: string;
+  continueSession: boolean; // CON vs END
+}
+
+export interface SMSMessageLog {
+  id: string;
+  to: string;
+  message: string;
+  status: "sent" | "delivered" | "failed";
+  timestamp: string;
+}
+
+export interface QRTransferPayload {
+  version: number;
+  type: "session_result" | "lesson_pack";
+  checksum: string;
+  data: any;
+  createdAt: string;
+}
+
+export interface GroupSessionResult {
+  client_id: string;
+  groupId: string;
+  schoolId: string;
+  tutorId: string;
+  topicId: number;
+  learnerResults: Array<{
+    learnerId: string;
+    preScore: number;
+    postScore: number;
+    gain: number;
+  }>;
+  avgGain: number;
+  notes?: string;
+  is_demo?: boolean;
+  at: string;
+}
+
+

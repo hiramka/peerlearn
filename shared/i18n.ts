@@ -85,6 +85,18 @@ export interface Translations {
   retentionGain: string;
   schoolTenantHealth: string;
   demoExcludedNotice: string;
+
+  // Phase 8: LATER items
+  tutorTraining: string;
+  pedagogicalCertification: string;
+  adaptiveGraph: string;
+  groupTutoring: string;
+  qrHandoff: string;
+  smsUssdService: string;
+  prerequisiteRemediation: string;
+  progressionAdvancement: string;
+  certifiedBadgeText: string;
+  startTrainingModule: string;
 }
 
 export const translations: Record<SupportedLanguage, Translations> = {
@@ -166,6 +178,18 @@ export const translations: Record<SupportedLanguage, Translations> = {
     retentionGain: "7-Day Retention Gain",
     schoolTenantHealth: "School Tenant Health & Real-World Engagement",
     demoExcludedNotice: "Demo Data Excluded (R5 Active)",
+
+    // Phase 8: LATER items
+    tutorTraining: "Peer Tutor Pedagogical Training",
+    pedagogicalCertification: "Certified Peer Tutor Badge",
+    adaptiveGraph: "Adaptive Prerequisite Learning Graph",
+    groupTutoring: "Small-Group Tutoring Sessions",
+    qrHandoff: "Zero-Data Offline QR Transfer",
+    smsUssdService: "Africa's Talking SMS & USSD Portal",
+    prerequisiteRemediation: "Recommended Prerequisite Topic (Remediation)",
+    progressionAdvancement: "Unlocked Advanced Topic (Progression)",
+    certifiedBadgeText: "Verified Pedagogical Peer Tutor",
+    startTrainingModule: "Start Interactive Training Module",
   },
   sw: {
     appName: "PeerLearn",
@@ -245,6 +269,18 @@ export const translations: Record<SupportedLanguage, Translations> = {
     retentionGain: "Ongezeko la Kumbukumbu (Siku 7)",
     schoolTenantHealth: "Afya ya Shule na Ushiriki Halisi",
     demoExcludedNotice: "Data ya Majaribio Imeondolewa (R5 Inafanya Kazi)",
+
+    // Phase 8: LATER items
+    tutorTraining: "Mafunzo ya Ualimu wa Kikaada kwa Wafunzaji",
+    pedagogicalCertification: "Beji ya Mfunzaji wa Rika Aliyeidhinishwa",
+    adaptiveGraph: "Grafu ya Mfuatano wa Masomo na Mahitaji ya Awali",
+    groupTutoring: "Vipindi vya Mafunzo ya Vikundi Vidogo",
+    qrHandoff: "Uhamisho wa QR Bila Mtandao Wala Data",
+    smsUssdService: "Huduma ya USSD na SMS ya Africa's Talking",
+    prerequisiteRemediation: "Mada ya Msingi Inayopendekezwa (Marudio)",
+    progressionAdvancement: "Mada ya Juu Iliyofunguliwa (Kuendelea)",
+    certifiedBadgeText: "Mfunzaji wa Rika Aliyeidhinishwa Kiufundishaji",
+    startTrainingModule: "Anza Moduli ya Mafunzo",
   },
 };
 

@@ -15,6 +15,7 @@ import type {
   Topic,
   TopicStruggle,
   Tutor,
+  AdaptiveRecommendation,
 } from "../../shared/types";
 import { getTranslation, type SupportedLanguage } from "../../shared/i18n";
 import {
@@ -40,10 +41,15 @@ import {
   clearOfflineCache,
   type StorageStats,
 } from "./db";
+import { TutorTrainingHub } from "./components/TutorTrainingHub";
+import { AdaptiveGraphView } from "./components/AdaptiveGraphView";
+import { GroupTutoringView } from "./components/GroupTutoringView";
+import { TelecomSimulatorModal } from "./components/TelecomSimulatorModal";
+import { QRHandoffModal } from "./components/QRHandoffModal";
 
 const LEARNER_ID = "l1";
 type Stage = "browse" | "pre" | "lesson" | "post" | "retention" | "done";
-type NavView = "dashboard" | "courses" | "schedule" | "teacher" | "verify" | "platform_admin";
+type NavView = "dashboard" | "courses" | "schedule" | "teacher" | "verify" | "platform_admin" | "training" | "adaptive" | "groups";
 type Summary = ProofCohortSummary;
 
 function useOnline() {
@@ -281,6 +287,11 @@ export default function App() {
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [showCertModal, setShowCertModal] = useState(false);
   const [selectedCertTutor, setSelectedCertTutor] = useState<Tutor | null>(null);
+
+  // Phase 8: Telecom Simulator, Offline QR Handoff & Adaptive Recommendations
+  const [showTelecomModal, setShowTelecomModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [adaptiveRec, setAdaptiveRec] = useState<AdaptiveRecommendation | null>(null);
 
   const handleSetLanguage = (newLang: SupportedLanguage) => {
     setLang(newLang);
@@ -583,6 +594,12 @@ export default function App() {
         post: finalScore,
         topic_id: selectedTopic.id,
       });
+
+      // Phase 8: Fetch adaptive prerequisite recommendation based on final score
+      fetch(`/api/adaptive/recommendations/l1/${selectedTopic.id}?score=${finalScore}`)
+        .then((r) => r.json())
+        .then((rec) => setAdaptiveRec(rec))
+        .catch(() => {});
     }
     refresh();
   }
@@ -1225,6 +1242,57 @@ export default function App() {
                 <path d="M2 12l10 5 10-5" />
               </svg>
             </button>
+
+            {/* Phase 8: Tutor Training Hub */}
+            <button
+              className={`rail-icon-btn ${navView === "training" ? "active" : ""}`}
+              onClick={() => {
+                setNavView("training");
+                setStage("browse");
+              }}
+              title="Tutor Pedagogical Training Hub & Certification (Phase 8)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5z" />
+                <path d="M6 6h10" />
+                <path d="M6 10h10" />
+                <path d="M6 14h6" />
+              </svg>
+            </button>
+
+            {/* Phase 8: Adaptive Prerequisite Graph */}
+            <button
+              className={`rail-icon-btn ${navView === "adaptive" ? "active" : ""}`}
+              onClick={() => {
+                setNavView("adaptive");
+                setStage("browse");
+              }}
+              title="Adaptive Prerequisite Learning Graph (Phase 8)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6" cy="6" r="3" />
+                <circle cx="18" cy="18" r="3" />
+                <line x1="8.59" y1="8.59" x2="15.42" y2="15.42" />
+                <line x1="18" y1="6" x2="6" y2="18" />
+              </svg>
+            </button>
+
+            {/* Phase 8: Small-Group Tutoring */}
+            <button
+              className={`rail-icon-btn ${navView === "groups" ? "active" : ""}`}
+              onClick={() => {
+                setNavView("groups");
+                setStage("browse");
+              }}
+              title="Small-Group Peer Tutoring (Phase 8)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </button>
           </div>
 
           <div className="sidebar-bottom-icons">
@@ -1359,6 +1427,21 @@ export default function App() {
                     🗑️ {storageStats.usageFormatted}
                   </button>
                 )}
+                {/* Phase 8: Africa's Talking USSD & QR Transfer Quick Buttons */}
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowTelecomModal(true)}
+                  title="Launch Africa's Talking USSD (*384#) Feature Phone Simulator (Phase 8)"
+                >
+                  📟 *384# USSD
+                </button>
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowQRModal(true)}
+                  title="Zero-Data Offline QR Code Transfer Engine (Phase 8)"
+                >
+                  📱 QR Transfer
+                </button>
               </div>
 
               {/* Online / Offline status */}
@@ -1428,7 +1511,7 @@ export default function App() {
           )}
 
           {/* Main Dashboard Grid View */}
-          {stage === "browse" && navView !== "teacher" && navView !== "verify" && (
+          {stage === "browse" && navView !== "teacher" && navView !== "verify" && navView !== "training" && navView !== "adaptive" && navView !== "groups" && (
             <div className="dash-columns-layout">
               {/* Left / Center Column (Find your tutor & Schedule) */}
               <div className="dash-main-column">
@@ -1959,6 +2042,30 @@ export default function App() {
 
                 <div className="results-gain-badge">
                   {post >= pre ? `+${Math.round((post - pre) * 100)}% Verified Learning Gain` : "Reviewed"}
+                </div>
+
+                {/* Phase 8: Adaptive Prerequisite Recommendation */}
+                {adaptiveRec && (
+                  <div className={`adaptive-result-notice ${adaptiveRec.type}`}>
+                    <span className="rec-badge">
+                      {adaptiveRec.type === "remediation_prerequisite" && "⚠️ Prerequisite Review Needed"}
+                      {adaptiveRec.type === "reinforce_current" && "🔁 Peer Practice Recommended"}
+                      {adaptiveRec.type === "progression_advance" && "🚀 Next Topic Progression Unlocked"}
+                    </span>
+                    <strong>{adaptiveRec.recommendedTopicName}</strong>
+                    <p style={{ margin: "4px 0 0", fontSize: "12px" }}>{adaptiveRec.reason}</p>
+                  </div>
+                )}
+
+                {/* Phase 8: Zero-Data QR Transfer Button */}
+                <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+                  <button
+                    className="action-pill-btn"
+                    onClick={() => setShowQRModal(true)}
+                    title="Generate QR code for teacher to scan with zero internet"
+                  >
+                    📱 Display QR Code for Teacher Scan
+                  </button>
                 </div>
 
                 {/* Session Feedback & Tutor Rating Component */}
@@ -3065,6 +3172,61 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Phase 8: Tutor Training Hub */}
+          {navView === "training" && (
+            <div className="dash-stage-container">
+              <div className="stage-back-bar">
+                <button className="back-link-btn" onClick={() => setNavView("dashboard")}>
+                  ← Back to Dashboard
+                </button>
+                <div className="stage-title-pill">Pedagogical Training & Certification</div>
+              </div>
+              <TutorTrainingHub
+                tutorId={selectedTutor?.tutor.id || "t1"}
+                tutorName={selectedTutor?.tutor.name || "Wanjiru"}
+                onOpenCert={() => {
+                  setSelectedCertTutor(selectedTutor?.tutor || tutors[0]?.tutor || null);
+                  setShowCertModal(true);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Phase 8: Adaptive Prerequisite Learning Graph */}
+          {navView === "adaptive" && (
+            <div className="dash-stage-container">
+              <div className="stage-back-bar">
+                <button className="back-link-btn" onClick={() => setNavView("dashboard")}>
+                  ← Back to Dashboard
+                </button>
+                <div className="stage-title-pill">Adaptive Knowledge Graph</div>
+              </div>
+              <AdaptiveGraphView
+                onSelectTopic={(tid) => {
+                  const t = topics.find((x) => x.id === tid);
+                  if (t) handleSelectTopic(t);
+                  setNavView("dashboard");
+                }}
+              />
+            </div>
+          )}
+
+          {/* Phase 8: Small-Group Peer Tutoring */}
+          {navView === "groups" && (
+            <div className="dash-stage-container">
+              <div className="stage-back-bar">
+                <button className="back-link-btn" onClick={() => setNavView("dashboard")}>
+                  ← Back to Dashboard
+                </button>
+                <div className="stage-title-pill">Small-Group Peer Tutoring</div>
+              </div>
+              <GroupTutoringView
+                topics={topics}
+                tutors={tutors.map((tr) => tr.tutor)}
+              />
+            </div>
+          )}
         </section>
       </div>
 
@@ -3509,6 +3671,19 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Phase 8: Africa's Talking USSD & SMS Simulator Modal */}
+      {showTelecomModal && (
+        <TelecomSimulatorModal onClose={() => setShowTelecomModal(false)} />
+      )}
+
+      {/* Phase 8: Zero-Data Offline QR Handoff Modal */}
+      {showQRModal && (
+        <QRHandoffModal
+          onClose={() => setShowQRModal(false)}
+          activeLesson={lesson}
+        />
       )}
     </div>
   );

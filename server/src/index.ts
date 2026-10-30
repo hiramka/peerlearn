@@ -40,6 +40,30 @@ import {
   getPlatformSchoolHealth,
   generatePlatformImpactReport,
 } from "./dashboards";
+import {
+  getTrainingModules,
+  getTutorTrainingProgress,
+  completeTrainingModule,
+} from "./training";
+import {
+  getPrerequisiteGraph,
+  getAdaptiveRecommendations,
+} from "./adaptive";
+import {
+  getGroupMatches,
+  createGroupMatch,
+  recordGroupSessionResult,
+  getGroupSessions,
+} from "./groups";
+import {
+  processUSSDRequest,
+  sendSMS,
+  getSMSLogs,
+} from "./telecom";
+import {
+  generateQRPayload,
+  parseAndIngestQRPayload,
+} from "./qr";
 import type { SessionResult, SessionEvent } from "../../shared/types";
 
 const app = express();
@@ -494,5 +518,122 @@ app.get("/api/platform/impact-report", (_req, res) => {
   res.json(generatePlatformImpactReport());
 });
 
+// ============================================================================
+// Phase 8: LATER Items (Training, Adaptive Graph, Groups, Telecom, QR Handoff)
+// ============================================================================
+
+// 1. Tutor Training Micro-Lessons & Pedagogical Certification
+app.get("/api/training/modules", (_req, res) => {
+  res.json(getTrainingModules());
+});
+
+app.get("/api/training/progress/:tutorId", (req, res) => {
+  res.json(getTutorTrainingProgress(req.params.tutorId));
+});
+
+app.post("/api/training/complete-module", (req, res) => {
+  const { tutorId, moduleId, answer } = req.body;
+  if (!tutorId || !moduleId || typeof answer !== "number") {
+    return res.status(400).json({ error: "tutorId, moduleId, and answer index required." });
+  }
+  try {
+    const result = completeTrainingModule(tutorId, moduleId, answer);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 2. Adaptive Practice & Prerequisite Knowledge Graph
+app.get("/api/adaptive/graph", (_req, res) => {
+  res.json(getPrerequisiteGraph());
+});
+
+app.get("/api/adaptive/recommendations/:studentId/:topicId", (req, res) => {
+  const score = Number(req.query.score ?? 0.5);
+  res.json(getAdaptiveRecommendations(req.params.studentId, Number(req.params.topicId), score));
+});
+
+// 3. Small-Group Peer Tutoring Sessions
+app.get("/api/groups", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  res.json(getGroupMatches(schoolId));
+});
+
+app.post("/api/groups/match", (req, res) => {
+  try {
+    const match = createGroupMatch(req.body);
+    res.status(201).json({ ok: true, match });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/groups/session", (req, res) => {
+  try {
+    const result = recordGroupSessionResult(req.body);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/groups/sessions", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "s1";
+  res.json(getGroupSessions(schoolId));
+});
+
+// 4. Africa's Talking SMS & USSD Webhooks
+app.post("/api/ussd", (req, res) => {
+  try {
+    const response = processUSSDRequest(req.body);
+    res.json(response);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/sms/send", (req, res) => {
+  const { to, message } = req.body;
+  try {
+    const result = sendSMS(to, message);
+    res.status(201).json({ ok: true, log: result });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/sms/logs", (_req, res) => {
+  res.json(getSMSLogs());
+});
+
+// 5. Zero-Data Offline QR Handoff
+app.post("/api/qr/encode", (req, res) => {
+  const { type, data } = req.body;
+  if (!type || !data) {
+    return res.status(400).json({ error: "type and data are required." });
+  }
+  try {
+    const result = generateQRPayload(type, data);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/qr/decode", (req, res) => {
+  const { rawString } = req.body;
+  if (!rawString) {
+    return res.status(400).json({ error: "rawString is required." });
+  }
+  try {
+    const result = parseAndIngestQRPayload(rawString);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => console.log(`API on http://localhost:${port}`));
+

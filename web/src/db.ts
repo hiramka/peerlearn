@@ -217,3 +217,21 @@ export async function clearOfflineCache(): Promise<void> {
   }
 }
 
+// ============================================================================
+// Phase 8: Offline Helpers for Training & Group Tutoring
+// ============================================================================
+
+export async function saveTrainingProgressOffline(progress: any): Promise<void> {
+  const db = await dbp;
+  await db.put("meta", progress, `training_progress_${progress.tutorId}`);
+}
+
+export async function getTrainingProgressOffline(tutorId: string): Promise<any | null> {
+  try {
+    const db = await dbp;
+    return (await db.get("meta", `training_progress_${tutorId}`)) ?? null;
+  } catch {
+    return null;
+  }
+}
+

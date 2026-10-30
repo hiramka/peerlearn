@@ -61,6 +61,11 @@ export function evaluateMatch(learner: Person, tutor: Tutor, topicId: number): M
     breakdown.push({ label: `Track Record (+${Math.round(tutor.avgGain * 100)}% gain)`, points: gainPts });
   }
 
+  // LATER: Pedagogical Certification Bonus
+  if (tutor.trainingCompleted) {
+    breakdown.push({ label: "Certified Peer Tutor (Pedagogy Badge)", points: 10 });
+  }
+
   const score = breakdown.reduce((a, b) => a + b.points, 0);
   return { score, breakdown };
 }
