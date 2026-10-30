@@ -235,3 +235,76 @@ export async function getTrainingProgressOffline(tutorId: string): Promise<any |
   }
 }
 
+// ============================================================================
+// Phase 13: Outbox Inspection, Network Diagnostics & JSON Backup
+// ============================================================================
+
+export async function getOutboxItems(): Promise<SessionResult[]> {
+  const db = await dbp;
+  return db.getAll("outbox");
+}
+
+export async function exportOutboxBackupJSON(): Promise<string> {
+  const db = await dbp;
+  const sessions = await db.getAll("outbox");
+  const events = await db.getAll("events_outbox");
+  const payload = {
+    backupTimestamp: new Date().toISOString(),
+    schoolCode: localStorage.getItem("peerlearn_school_code") || "ALLIANCE",
+    sessionsCount: sessions.length,
+    eventsCount: events.length,
+    sessions,
+    events,
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+export async function purgeCorruptedOutbox(): Promise<number> {
+  const db = await dbp;
+  const items = await db.getAll("outbox");
+  let purged = 0;
+  for (const item of items) {
+    if (!item.client_id || !item.learnerId || typeof item.pre !== "number" || typeof item.post !== "number") {
+      await db.delete("outbox", item.client_id);
+      purged++;
+    }
+  }
+  return purged;
+}
+
+export async function getNetworkDiagnostics(): Promise<{
+  online: boolean;
+  latencyMs: number;
+  swActive: boolean;
+  pendingOutbox: number;
+  pendingEvents: number;
+}> {
+  const online = navigator.onLine;
+  let latencyMs = -1;
+
+  if (online) {
+    const start = performance.now();
+    try {
+      const res = await fetch("/api/ping", { cache: "no-store" });
+      if (res.ok) {
+        latencyMs = Math.round(performance.now() - start);
+      }
+    } catch {
+      latencyMs = -1;
+    }
+  }
+
+  const db = await dbp;
+  const pendingOutbox = await db.count("outbox");
+  const pendingEvents = await db.count("events_outbox");
+  const swActive = "serviceWorker" in navigator && !!navigator.serviceWorker.controller;
+
+  return {
+    online,
+    latencyMs,
+    swActive,
+    pendingOutbox,
+    pendingEvents,
+  };
+}
+

@@ -340,6 +340,31 @@ export interface ImpactReport {
   generatedAt: string;
 }
 
+export interface DonorAuditVerificationReport {
+  reportId: string;
+  schoolId: string;
+  schoolName: string;
+  county: string;
+  schoolCode: string;
+  tier: string;
+  sponsorName?: string;
+  period: string;
+  totalTutoredStudents: number;
+  totalTutors: number;
+  totalSessions: number;
+  tutoredAvgImmediateGain: number;
+  tutoredAvgRetentionGain: number;
+  controlAvgImmediateGain: number;
+  netImpactLift: number;
+  retentionPersistenceRatio: number;
+  effectSizeCohenD: number;
+  topTutors: Array<{ name: string; grade: number; sessions: number; avgGain: number; rating: number }>;
+  topicsBreakdown: Array<{ topicId: number; name: string; subject: string; sessions: number; avgGain: number }>;
+  demoExcluded: boolean;
+  auditVerificationHash: string;
+  issuedAt: string;
+}
+
 // ============================================================================
 // Phase 8: LATER Items (Africa's Talking SMS/USSD, QR Handoff, Group Sessions,
 // Adaptive Practice Prerequisite Graph, Tutor Training Micro-Lessons)

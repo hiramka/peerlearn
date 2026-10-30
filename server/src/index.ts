@@ -42,6 +42,7 @@ import {
   getNoImprovementFlags,
   getPlatformSchoolHealth,
   generatePlatformImpactReport,
+  generateDonorAuditVerificationReport,
 } from "./dashboards";
 import {
   getTrainingModules,
@@ -428,6 +429,23 @@ app.get("/api/curriculum", (_req, res) => {
     ],
     topics,
   });
+});
+
+// Phase 13: Latency & Network Diagnostics ping endpoint
+app.get("/api/ping", (_req, res) => {
+  res.json({
+    ok: true,
+    timestamp: Date.now(),
+    service: "peerlearn-api",
+    status: "healthy",
+  });
+});
+
+// Phase 13: Donor & Board of Management Pilot Impact Verification Report (R5)
+app.get("/api/donor-audit-report", (req, res) => {
+  const schoolId = (req.query.schoolId as string) || "11111111-1111-1111-1111-111111111111";
+  const report = generateDonorAuditVerificationReport(schoolId);
+  res.json(report);
 });
 
 // SAFE-6: Audit Log

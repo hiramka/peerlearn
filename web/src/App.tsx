@@ -47,6 +47,8 @@ import { GroupTutoringView } from "./components/GroupTutoringView";
 import { TelecomSimulatorModal } from "./components/TelecomSimulatorModal";
 import { QRHandoffModal } from "./components/QRHandoffModal";
 import { PrintableConsentSlipModal } from "./components/PrintableConsentSlipModal";
+import { NetworkDiagnosticsModal } from "./components/NetworkDiagnosticsModal";
+import { DonorImpactReportModal } from "./components/DonorImpactReportModal";
 
 const LEARNER_ID = "l1";
 type Stage = "browse" | "pre" | "lesson" | "post" | "retention" | "done";
@@ -312,6 +314,10 @@ export default function App() {
     tier: "pilot_standard",
     term_fee_kes: 15000,
   });
+
+  // Phase 13: Field Diagnostics, Sync Queue Inspector & Donor Audit Verification
+  const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
+  const [showDonorReportModal, setShowDonorReportModal] = useState(false);
 
   const handleSetLanguage = (newLang: SupportedLanguage) => {
     setLang(newLang);
@@ -1479,6 +1485,21 @@ export default function App() {
                   title="Print or verify official Republic of Kenya DPA 2019 Parental Consent Slip"
                 >
                   📋 Consent Slip
+                </button>
+                {/* Phase 13: Field Diagnostics & Donor Report Buttons */}
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowDiagnosticsModal(true)}
+                  title="Open Network Diagnostics & Outbox Inspector (Phase 13)"
+                >
+                  🩺 Diagnostics
+                </button>
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => setShowDonorReportModal(true)}
+                  title="View Official Cryptographic Donor Impact Report (Phase 13)"
+                >
+                  📊 Donor Report
                 </button>
               </div>
 
@@ -3783,6 +3804,20 @@ export default function App() {
           setGuardianConsentGiven(true);
           setMsg("Guardian paper consent slip successfully verified and recorded.");
         }}
+      />
+
+      {/* Phase 13: Field Network Diagnostics & Outbox Inspector Modal */}
+      <NetworkDiagnosticsModal
+        isOpen={showDiagnosticsModal}
+        onClose={() => setShowDiagnosticsModal(false)}
+        onSyncComplete={refresh}
+      />
+
+      {/* Phase 13: Official Cryptographic Donor Impact Report Modal */}
+      <DonorImpactReportModal
+        isOpen={showDonorReportModal}
+        onClose={() => setShowDonorReportModal(false)}
+        schoolId={authSession?.user.school_id}
       />
     </div>
   );
