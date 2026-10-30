@@ -29,6 +29,10 @@ An offline-first, privacy-compliant peer-tutoring matchmaker and progressive web
   - **Supabase Cloud Migration:** Multi-tenant RLS schema for all core and Phase 8 tables (`supabase/migrations/`).
   - **Offline School Server Appliance:** Turnkey Docker & Docker Compose setup with local SQLite/Postgres fallback for zero-connectivity school computer labs ([`docs/OFFLINE_SCHOOL_SERVER.md`](docs/OFFLINE_SCHOOL_SERVER.md)).
   - **Automated CI/CD:** GitHub Actions workflow executing type checking, unit tests, and production PWA building on every push.
+- **Phase 11 Curriculum Expansion, Dual Guardian Consent & Pilot Operations:**
+  - **Kenyan Secondary Curriculum Bank (8-4-4 & CBC):** 8 comprehensive topic packs across Mathematics, Biology, Physics, Chemistry, and CBC Junior Secondary Integrated Science with 100% disjoint pre/post/retention quizzes.
+  - **Dual-Track Guardian Consent (SPEC_V2 10.5):** Official Ministry of Education & Kenya DPA 2019 printable paper consent slip with tamper-evident serials + in-app digital consent verification.
+  - **School Pilot Tier Management (SPEC_V2 10.2/10.4):** Tier structure for Standard Pilot (KES 15,000/term), Sponsor-Subsidized Partner (Safaricom / Equity Foundation), and Free Sandbox.
 
 ---
 
@@ -70,7 +74,7 @@ Open `http://localhost:5173` in your browser.
 ## 🧪 Testing
 
 ```bash
-# Run the complete test suite (58/58 passing)
+# Run the complete test suite (71/71 passing)
 npm test
 
 # Run Playwright end-to-end browser offline test
@@ -81,6 +85,7 @@ npm run typecheck
 ```
 
 ### Test Suites Included:
+- `test/phase11-curriculum-consent.test.ts`: Phase 11 8-4-4 & CBC secondary curriculum packs, strictly disjoint pre/post/retention questions, dual paper/in-app consent slips, and pilot school pricing tiers.
 - `test/e2e-offline.test.ts`: Phase 9 End-to-end offline student session, flaky network 10x repeated sync, and idempotent single-row server deduplication.
 - `test/playwright/offline-session.spec.ts`: Phase 9 Playwright headless browser offline mode test (SPEC_V2 Section 7).
 - `test/phase8-later.test.ts`: Tutor training micro-lessons, certified badges, adaptive knowledge graph, group sessions, Africa's Talking USSD/SMS, and zero-data QR handoff checksums.

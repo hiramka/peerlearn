@@ -14,6 +14,8 @@ import {
   applicationsStore,
   exportStudentData,
   eraseStudentData,
+  updateSchoolPilotTier,
+  getSchoolPilotTier,
 } from "./auth";
 import {
   approveTutorTopic,
@@ -23,6 +25,7 @@ import {
   resolveReport,
   recordGuardianConsent,
   checkGuardianConsent,
+  generatePaperConsentSlip,
   auditLogsStore,
 } from "./safeguarding";
 import {
@@ -350,19 +353,81 @@ app.post("/api/reports/resolve", (req, res) => {
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-// SAFE-5: Record & Check Guardian Consent
+// SAFE-5: Record & Check Guardian Consent (Dual Track: In-App & Paper Slip)
 app.post("/api/guardian-consent", (req, res) => {
-  const { schoolId, studentId, guardianName, guardianPhone } = req.body;
+  const {
+    schoolId,
+    studentId,
+    guardianName,
+    guardianPhone,
+    guardianNationalId,
+    consentType,
+    slipSerialNumber,
+    verifiedBy,
+  } = req.body;
   if (!schoolId || !studentId) {
     return res.status(400).json({ error: "schoolId and studentId are required." });
   }
-  const consent = recordGuardianConsent(schoolId, studentId, guardianName, guardianPhone);
+  const consent = recordGuardianConsent(schoolId, studentId, {
+    guardianName,
+    guardianPhone,
+    guardianNationalId,
+    consentType,
+    slipSerialNumber,
+    verifiedBy,
+  });
   res.json({ ok: true, consent });
+});
+
+app.get("/api/guardian-consent/slip/:studentId", (req, res) => {
+  const student = profilesStore.find((s) => s.id === req.params.studentId || s.reg_number === req.params.studentId);
+  if (!student) {
+    return res.status(404).json({ error: "Student not found." });
+  }
+  const school = schoolsStore.find((s) => s.id === student.school_id);
+  const slip = generatePaperConsentSlip({
+    id: student.id,
+    full_name: student.full_name,
+    reg_number: student.reg_number,
+    grade: student.grade,
+    school_name: school ? school.name : "Secondary School",
+    school_id: student.school_id,
+  });
+  res.json(slip);
 });
 
 app.get("/api/guardian-consent/:studentId", (req, res) => {
   const consented = checkGuardianConsent(req.params.studentId);
   res.json({ studentId: req.params.studentId, consent_given: consented });
+});
+
+// School Pilot Tier & Pricing Management (SPEC_V2 Section 10)
+app.get("/api/platform/schools/:id/tier", (req, res) => {
+  const result = getSchoolPilotTier(req.params.id);
+  res.status(result.ok ? 200 : 404).json(result);
+});
+
+app.patch("/api/platform/schools/:id/tier", (req, res) => {
+  const { tier, sponsorName, termFeeKes, termExpiresAt, actorId } = req.body;
+  if (!tier) return res.status(400).json({ error: "tier is required." });
+  const result = updateSchoolPilotTier(req.params.id, tier, {
+    sponsorName,
+    termFeeKes,
+    termExpiresAt,
+    actorId,
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+// Curriculum overview endpoint
+app.get("/api/curriculum", (_req, res) => {
+  res.json({
+    frameworks: [
+      { id: "8-4-4", name: "8-4-4 Secondary System (Forms 1–4 KCSE)" },
+      { id: "CBC", name: "Competency-Based Curriculum (CBC Grades 7–9 Junior Secondary)" },
+    ],
+    topics,
+  });
 });
 
 // SAFE-6: Audit Log

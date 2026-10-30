@@ -46,6 +46,7 @@ import { AdaptiveGraphView } from "./components/AdaptiveGraphView";
 import { GroupTutoringView } from "./components/GroupTutoringView";
 import { TelecomSimulatorModal } from "./components/TelecomSimulatorModal";
 import { QRHandoffModal } from "./components/QRHandoffModal";
+import { PrintableConsentSlipModal } from "./components/PrintableConsentSlipModal";
 
 const LEARNER_ID = "l1";
 type Stage = "browse" | "pre" | "lesson" | "post" | "retention" | "done";
@@ -292,6 +293,25 @@ export default function App() {
   const [showTelecomModal, setShowTelecomModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [adaptiveRec, setAdaptiveRec] = useState<AdaptiveRecommendation | null>(null);
+
+  // Phase 11: Curriculum Expansion, Dual Guardian Consent & Pilot Tier Management
+  const [showConsentSlipModal, setShowConsentSlipModal] = useState(false);
+  const [selectedStudentForSlip, setSelectedStudentForSlip] = useState<{
+    id: string;
+    fullName: string;
+    regNumber: string;
+    grade: number;
+    schoolName: string;
+    schoolId: string;
+  } | undefined>(undefined);
+  const [schoolPilotTier, setSchoolPilotTier] = useState<{
+    tier: string;
+    term_fee_kes: number;
+    sponsor_name?: string;
+  }>({
+    tier: "pilot_standard",
+    term_fee_kes: 15000,
+  });
 
   const handleSetLanguage = (newLang: SupportedLanguage) => {
     setLang(newLang);
@@ -1442,6 +1462,46 @@ export default function App() {
                 >
                   📱 QR Transfer
                 </button>
+                {/* Phase 11: Official Kenya DPA 2019 Parental Consent Slip */}
+                <button
+                  className="lang-toggle-btn"
+                  onClick={() => {
+                    setSelectedStudentForSlip({
+                      id: authSession?.user.id || "l1",
+                      fullName: authSession?.user.full_name || "Amani R. (Learner)",
+                      regNumber: authSession?.user.reg_number || "ADM-101",
+                      grade: authSession?.user.grade || 2,
+                      schoolName: "Alliance High School",
+                      schoolId: authSession?.user.school_id || "11111111-1111-1111-1111-111111111111",
+                    });
+                    setShowConsentSlipModal(true);
+                  }}
+                  title="Print or verify official Republic of Kenya DPA 2019 Parental Consent Slip"
+                >
+                  📋 Consent Slip
+                </button>
+              </div>
+
+              {/* Pilot Tier Badge (SPEC_V2 Section 10) */}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  backgroundColor: schoolPilotTier.tier === "sponsor_partner" ? "#f0fdf4" : "#eff6ff",
+                  color: schoolPilotTier.tier === "sponsor_partner" ? "#166534" : "#1e40af",
+                  border: `1px solid ${schoolPilotTier.tier === "sponsor_partner" ? "#bbf7d0" : "#bfdbfe"}`,
+                }}
+                title={
+                  schoolPilotTier.tier === "sponsor_partner"
+                    ? `Fully sponsored by ${schoolPilotTier.sponsor_name || "Safaricom Foundation"}`
+                    : `Standard Pilot: KES ${schoolPilotTier.term_fee_kes.toLocaleString()}/Term`
+                }
+              >
+                🏷️ {schoolPilotTier.tier === "sponsor_partner" ? "Sponsored: Safaricom" : `Pilot: KES ${schoolPilotTier.term_fee_kes.toLocaleString()}/t`}
               </div>
 
               {/* Online / Offline status */}
@@ -1529,8 +1589,12 @@ export default function App() {
                         className="filter-pill-dropdown"
                       >
                         <option value="All">All Subjects ▾</option>
-                        <option value="Math">Math ▾</option>
-                        <option value="Science">Science ▾</option>
+                        <option value="Math">Math (Hesabu) ▾</option>
+                        <option value="Biology">Biology (Biolojia) ▾</option>
+                        <option value="Physics">Physics (Fizikia) ▾</option>
+                        <option value="Chemistry">Chemistry (Kemia) ▾</option>
+                        <option value="Science">Science (Sayansi) ▾</option>
+                        <option value="Integrated Science">CBC Integrated Science ▾</option>
                       </select>
                     </div>
                   </div>
@@ -1742,13 +1806,37 @@ export default function App() {
                           onClick={() => handleSelectTopic(t)}
                         >
                           <div className="course-black-icon">
-                            {t.subject === "Math" ? "∑" : "⚛"}
+                            {t.subject === "Math"
+                              ? "∑"
+                              : t.subject === "Biology"
+                              ? "🧬"
+                              : t.subject === "Physics"
+                              ? "⚡"
+                              : t.subject === "Chemistry"
+                              ? "🧪"
+                              : t.subject === "Integrated Science"
+                              ? "🌱"
+                              : "⚛"}
                           </div>
 
                           <div className="course-row-info">
                             <strong className="course-row-title">{t.name}</strong>
-                            <span className="course-row-meta">
-                              {t.subject} • Form {t.grade} • 20 Hours
+                            <span className="course-row-meta" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                              <span
+                                style={{
+                                  backgroundColor: t.curriculum === "CBC" ? "#16a34a" : "#0284c7",
+                                  color: "#ffffff",
+                                  padding: "1px 6px",
+                                  borderRadius: "4px",
+                                  fontSize: "10px",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {t.curriculum || "8-4-4"}
+                              </span>
+                              <span>
+                                {t.subject} • {t.grade >= 7 ? `Grade ${t.grade}` : `Form ${t.grade}`} {t.strand ? `• ${t.strand}` : ""}
+                              </span>
                             </span>
                           </div>
 
@@ -3685,6 +3773,17 @@ export default function App() {
           activeLesson={lesson}
         />
       )}
+
+      {/* Phase 11: Official Kenya DPA 2019 & Ministry of Education Consent Slip Modal */}
+      <PrintableConsentSlipModal
+        isOpen={showConsentSlipModal}
+        onClose={() => setShowConsentSlipModal(false)}
+        defaultStudent={selectedStudentForSlip}
+        onConsentRecorded={(_sid) => {
+          setGuardianConsentGiven(true);
+          setMsg("Guardian paper consent slip successfully verified and recorded.");
+        }}
+      />
     </div>
   );
 }

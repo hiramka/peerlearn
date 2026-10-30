@@ -7,6 +7,7 @@ import type {
   StudentLoginInput,
   CSVImportStudentRow,
   SchoolApplication,
+  PilotTier,
 } from "../../shared/types";
 
 // In-memory tenant and auth store (mirrors Supabase tables for zero-dependency local dev/testing)
@@ -37,6 +38,9 @@ export const schoolsStore: School[] = [
     county: "Kiambu",
     school_code: "ALLIANCE",
     status: "active",
+    tier: "pilot_standard",
+    term_fee_kes: 15000,
+    term_expires_at: new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString(),
     created_at: new Date().toISOString(),
   },
   {
@@ -45,6 +49,10 @@ export const schoolsStore: School[] = [
     county: "Kiambu",
     school_code: "MANGU",
     status: "active",
+    tier: "sponsor_partner",
+    sponsor_name: "Safaricom Foundation",
+    term_fee_kes: 0,
+    term_expires_at: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
     created_at: new Date().toISOString(),
   },
 ];
@@ -456,4 +464,58 @@ export function eraseStudentData(studentId: string, actorId: string): {
   });
 
   return { ok: true, message: "Student personal data successfully erased and anonymized under Kenya DPA." };
+}
+
+// Pilot Tier & Pricing Management (SPEC_V2 Section 10)
+export function updateSchoolPilotTier(
+  schoolId: string,
+  tier: PilotTier,
+  options?: {
+    sponsorName?: string;
+    termFeeKes?: number;
+    termExpiresAt?: string;
+    actorId?: string;
+  }
+) {
+  const school = schoolsStore.find((s) => s.id === schoolId);
+  if (!school) return { ok: false, error: "School not found." };
+
+  school.tier = tier;
+  if (tier === "free_sandbox") {
+    school.term_fee_kes = 0;
+    school.sponsor_name = undefined;
+  } else if (tier === "pilot_standard") {
+    school.term_fee_kes = options?.termFeeKes !== undefined ? options.termFeeKes : 15000;
+    school.sponsor_name = undefined;
+  } else if (tier === "sponsor_partner") {
+    school.term_fee_kes = 0;
+    school.sponsor_name = options?.sponsorName || "Safaricom Foundation";
+  }
+
+  if (options?.termExpiresAt) {
+    school.term_expires_at = options.termExpiresAt;
+  }
+
+  auditLogsStore.push({
+    id: auditLogsStore.length + 1,
+    schoolId,
+    actorId: options?.actorId || "platform_admin",
+    action: "update_school_tier",
+    detail: { tier, term_fee_kes: school.term_fee_kes, sponsor: school.sponsor_name },
+    createdAt: new Date().toISOString(),
+  });
+
+  return { ok: true, school };
+}
+
+export function getSchoolPilotTier(schoolId: string) {
+  const school = schoolsStore.find((s) => s.id === schoolId);
+  if (!school) return { ok: false, error: "School not found." };
+  return {
+    ok: true,
+    tier: school.tier || "pilot_standard",
+    term_fee_kes: school.term_fee_kes ?? 15000,
+    sponsor_name: school.sponsor_name,
+    term_expires_at: school.term_expires_at,
+  };
 }

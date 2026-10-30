@@ -1,5 +1,5 @@
 // Safeguarding Service (SAFE-1 to SAFE-6)
-import type { Report, ReportStatus, AuditLogEntry, GuardianConsent } from "../../shared/types";
+import type { Report, ReportStatus, AuditLogEntry, GuardianConsent, GuardianConsentType } from "../../shared/types";
 import { tutors } from "./data";
 
 export interface TutorApprovalRecord {
@@ -164,24 +164,87 @@ export function resolveReport(actorId: string, schoolId: string, reportId: strin
   return { ok: true, report };
 }
 
-// SAFE-5: Guardian Consent Check and Recording
-export function recordGuardianConsent(schoolId: string, studentId: string, guardianName?: string, guardianPhone?: string): GuardianConsent {
+// SAFE-5: Guardian Consent Check and Recording (Dual Track: In-App & Paper Slip)
+export function recordGuardianConsent(
+  schoolId: string,
+  studentId: string,
+  optionsOrName?: string | {
+    guardianName?: string;
+    guardianPhone?: string;
+    guardianNationalId?: string;
+    consentType?: GuardianConsentType;
+    slipSerialNumber?: string;
+    verifiedBy?: string;
+  },
+  guardianPhoneArg?: string
+): GuardianConsent {
+  let guardianName: string | undefined;
+  let guardianPhone: string | undefined;
+  let guardianNationalId: string | undefined;
+  let consentType: GuardianConsentType = "digital_in_app";
+  let slipSerialNumber: string | undefined;
+  let verifiedBy: string | undefined;
+
+  if (typeof optionsOrName === "object" && optionsOrName !== null) {
+    guardianName = optionsOrName.guardianName;
+    guardianPhone = optionsOrName.guardianPhone;
+    guardianNationalId = optionsOrName.guardianNationalId;
+    consentType = optionsOrName.consentType || "digital_in_app";
+    slipSerialNumber = optionsOrName.slipSerialNumber;
+    verifiedBy = optionsOrName.verifiedBy;
+  } else {
+    guardianName = optionsOrName;
+    guardianPhone = guardianPhoneArg;
+  }
+
+  if (consentType === "paper_slip" && !slipSerialNumber) {
+    slipSerialNumber = `PL-SLIP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+  }
+
   const consent: GuardianConsent = {
     student_id: studentId,
     school_id: schoolId,
     consent_given: true,
+    consent_type: consentType,
     guardian_name: guardianName,
     guardian_phone: guardianPhone,
+    guardian_national_id: guardianNationalId,
+    slip_serial_number: slipSerialNumber,
+    verified_by: verifiedBy,
     consented_at: new Date().toISOString(),
   };
   guardianConsentStore[studentId] = consent;
 
-  logSafeguardingAudit(schoolId, studentId, "RECORD_GUARDIAN_CONSENT", {
+  logSafeguardingAudit(schoolId, verifiedBy || studentId, "RECORD_GUARDIAN_CONSENT", {
     studentId,
+    consentType: consent.consent_type,
+    slipSerialNumber: consent.slip_serial_number,
     guardianName,
   });
 
   return consent;
+}
+
+export function generatePaperConsentSlip(student: {
+  id: string;
+  full_name: string;
+  reg_number: string;
+  grade: number;
+  school_name: string;
+  school_id: string;
+}) {
+  const serial = `PL-KE-G${student.grade}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  return {
+    serial_number: serial,
+    student_id: student.id,
+    student_name: student.full_name,
+    reg_number: student.reg_number,
+    grade: student.grade,
+    school_name: student.school_name,
+    school_id: student.school_id,
+    legal_framework: "Kenya Data Protection Act (2019) & Ministry of Education Child Safety Guidelines",
+    issued_at: new Date().toISOString(),
+  };
 }
 
 export function checkGuardianConsent(studentId: string): boolean {

@@ -4,6 +4,8 @@ export type SchoolRole = 'platform_admin' | 'school_admin' | 'teacher' | 'tutor'
 export type SchoolStatus = 'sandbox' | 'pilot' | 'active' | 'paused';
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
 
+export type PilotTier = 'free_sandbox' | 'pilot_standard' | 'sponsor_partner';
+
 export interface School {
   id: string;
   name: string;
@@ -12,6 +14,10 @@ export interface School {
   status: SchoolStatus;
   pilot_started_at?: string;
   created_at?: string;
+  tier?: PilotTier;
+  sponsor_name?: string;
+  term_fee_kes?: number;
+  term_expires_at?: string;
 }
 
 export interface SchoolApplication {
@@ -125,16 +131,32 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+export type GuardianConsentType = 'digital_in_app' | 'paper_slip';
+
 export interface GuardianConsent {
   student_id: string;
   school_id: string;
   consent_given: boolean;
+  consent_type?: GuardianConsentType;
   guardian_name?: string;
   guardian_phone?: string;
+  guardian_national_id?: string;
+  slip_serial_number?: string;
+  verified_by?: string;
   consented_at: string;
 }
 
-export interface Topic { id: number; subject: string; name: string; grade: number }
+export type CurriculumFramework = '8-4-4' | 'CBC';
+
+export interface Topic {
+  id: number;
+  subject: string;
+  name: string;
+  grade: number;
+  curriculum?: CurriculumFramework;
+  strand?: string;
+  term?: number;
+}
 export interface Question {
   id?: string | number;
   q: string;
