@@ -53,6 +53,8 @@ import { ForumQnAView } from "./components/ForumQnAView";
 import { SchoolNoticeBoardModal } from "./components/SchoolNoticeBoardModal";
 import { TeacherCATGradebookModal } from "./components/TeacherCATGradebookModal";
 import { PastPaperLibraryModal } from "./components/PastPaperLibraryModal";
+import { LabToolsDrawer } from "./components/LabToolsDrawer";
+import { CommandPaletteModal } from "./components/CommandPaletteModal";
 
 const LEARNER_ID = "l1";
 type Stage = "browse" | "pre" | "lesson" | "post" | "retention" | "done";
@@ -207,8 +209,9 @@ export default function App() {
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // In-session interactive checklist
+  // In-session interactive checklist & collaborative scratchpad
   const [checkedSteps, setCheckedSteps] = useState<Record<number, boolean>>({});
+  const [scratchpadNotes, setScratchpadNotes] = useState("");
 
   // Phase 4: Retention Check State (PROOF-3)
   const [retentionAnswers, setRetentionAnswers] = useState<number[]>([]);
@@ -328,6 +331,22 @@ export default function App() {
   const [showNoticeBoardModal, setShowNoticeBoardModal] = useState(false);
   const [showGradebookModal, setShowGradebookModal] = useState(false);
   const [showPastPaperModal, setShowPastPaperModal] = useState(false);
+
+  // UI/UX Modernization: Fluid App Shell, Drawer & Quick Command Palette
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showLabToolsDrawer, setShowLabToolsDrawer] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowCommandPalette((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleSetLanguage = (newLang: SupportedLanguage) => {
     setLang(newLang);
@@ -589,6 +608,7 @@ export default function App() {
     setLesson(l);
     setQuizAnswers([]);
     setCheckedSteps({});
+    setScratchpadNotes("");
     setRating(5);
     setSelectedTags(["Clear steps", "Patient"]);
     setFeedbackSubmitted(false);
@@ -708,6 +728,7 @@ export default function App() {
     setStage("browse");
     setLesson(null);
     setMsg("");
+    setScratchpadNotes("");
   }
 
   async function openTeacherView() {
@@ -1187,158 +1208,196 @@ export default function App() {
 
   const allTopicsDownloaded = topics.length > 0 && topics.every((t) => offline.includes(t.id));
 
+  const isTeacherOrAdmin = authSession
+    ? authSession.user.role === "teacher" || authSession.user.role === "school_admin" || authSession.user.role === "platform_admin"
+    : demoRole === "tutor" || navView === "teacher" || navView === "platform_admin";
+  const isTutorOrHigher = authSession
+    ? authSession.user.role === "tutor" || isTeacherOrAdmin
+    : true;
+
   return (
     <div className="dashboard-outer-canvas">
       {/* Centered Floating Tablet Frame */}
       <div className="dashboard-frame">
-        {/* Left Vertical Icon Rail */}
-        <aside className="icon-sidebar">
-          <div className="sidebar-top-icons">
+        {/* Modern Responsive Navigation Sidebar */}
+        <aside className={`icon-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
+          <div className="sidebar-brand-wrapper">
+            <div className="sidebar-brand-title">
+              <div className="sidebar-logo-icon">🇰🇪</div>
+              {!isSidebarCollapsed && (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ fontWeight: 800, fontSize: "14px", color: "#f8fafc", letterSpacing: "-0.01em" }}>
+                    PeerLearn
+                  </span>
+                  <span style={{ fontSize: "10px", color: "#10b981", fontWeight: 600 }}>
+                    {authSession?.user.school_code || "ALLIANCE"} • Secondary
+                  </span>
+                </div>
+              )}
+            </div>
             <button
-              className={`rail-icon-btn ${navView === "dashboard" && stage === "browse" ? "active" : ""}`}
+              className="sidebar-collapse-toggle"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {isSidebarCollapsed ? "▶" : "◀"}
+            </button>
+          </div>
+
+          <div className="sidebar-top-icons">
+            {!isSidebarCollapsed && <div className="sidebar-section-title">Learning & Practice</div>}
+
+            <button
+              className={`sidebar-nav-btn ${navView === "dashboard" && stage === "browse" ? "active" : ""}`}
               onClick={() => {
                 setNavView("dashboard");
                 setStage("browse");
               }}
-              title="Dashboard"
+              title="Dashboard & Matchmaking"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
+              <span>🏠</span>
+              {!isSidebarCollapsed && <span>Find Tutors</span>}
             </button>
 
             <button
-              className={`rail-icon-btn ${navView === "courses" ? "active" : ""}`}
-              onClick={() => {
-                setNavView("courses");
-                setStage("browse");
-              }}
-              title="Topics & Courses"
+              className="sidebar-nav-btn"
+              onClick={() => setShowForumModal(true)}
+              title="Subject Q&A & Peer Homework Forum"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
+              <span>💬</span>
+              {!isSidebarCollapsed && <span>Q&A Forum</span>}
             </button>
 
             <button
-              className={`rail-icon-btn ${navView === "schedule" ? "active" : ""}`}
-              onClick={() => {
-                setNavView("schedule");
-                setStage("browse");
-              }}
-              title="Schedule"
+              className="sidebar-nav-btn"
+              onClick={() => setShowPastPaperModal(true)}
+              title="KNEC KCSE & CBC Past Papers"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
+              <span>📚</span>
+              {!isSidebarCollapsed && <span>Past Papers</span>}
             </button>
 
             <button
-              className={`rail-icon-btn ${navView === "verify" ? "active" : ""}`}
-              onClick={async () => {
-                setNavView("verify");
-                setStage("browse");
-                const l = await getLesson(1);
-                if (l) setLesson(l);
-              }}
-              title="Become a Tutor / Skill Verification"
+              className="sidebar-nav-btn"
+              onClick={() => setShowNoticeBoardModal(true)}
+              title="School Notice Board & Bulletins"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
-              </svg>
+              <span>📢</span>
+              {!isSidebarCollapsed && <span>Notice Board</span>}
             </button>
 
             <button
-              className={`rail-icon-btn ${navView === "teacher" ? "active" : ""}`}
-              onClick={openTeacherView}
-              title="Teacher Analytics & Content (DASH-1, CONT-1)"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-            </button>
-
-            <button
-              className={`rail-icon-btn ${navView === "platform_admin" ? "active" : ""}`}
-              onClick={() => {
-                setNavView("platform_admin");
-                loadPlatformAdminData();
-              }}
-              title="Platform Admin, School Health & Impact (DASH-2)"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-            </button>
-
-            {/* Phase 8: Tutor Training Hub */}
-            <button
-              className={`rail-icon-btn ${navView === "training" ? "active" : ""}`}
-              onClick={() => {
-                setNavView("training");
-                setStage("browse");
-              }}
-              title="Tutor Pedagogical Training Hub & Certification (Phase 8)"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5z" />
-                <path d="M6 6h10" />
-                <path d="M6 10h10" />
-                <path d="M6 14h6" />
-              </svg>
-            </button>
-
-            {/* Phase 8: Adaptive Prerequisite Graph */}
-            <button
-              className={`rail-icon-btn ${navView === "adaptive" ? "active" : ""}`}
+              className={`sidebar-nav-btn ${navView === "adaptive" ? "active" : ""}`}
               onClick={() => {
                 setNavView("adaptive");
                 setStage("browse");
               }}
-              title="Adaptive Prerequisite Learning Graph (Phase 8)"
+              title="Curriculum Prerequisite Knowledge Graph"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="6" cy="6" r="3" />
-                <circle cx="18" cy="18" r="3" />
-                <line x1="8.59" y1="8.59" x2="15.42" y2="15.42" />
-                <line x1="18" y1="6" x2="6" y2="18" />
-              </svg>
+              <span>🕸️</span>
+              {!isSidebarCollapsed && <span>Curriculum Graph</span>}
             </button>
 
-            {/* Phase 8: Small-Group Tutoring */}
             <button
-              className={`rail-icon-btn ${navView === "groups" ? "active" : ""}`}
+              className={`sidebar-nav-btn ${navView === "groups" ? "active" : ""}`}
               onClick={() => {
                 setNavView("groups");
                 setStage("browse");
               }}
-              title="Small-Group Peer Tutoring (Phase 8)"
+              title="Small-Group Peer Circles"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
+              <span>👥</span>
+              {!isSidebarCollapsed && <span>Group Tutoring</span>}
             </button>
+
+            {(isTeacherOrAdmin || isTutorOrHigher) && (
+              <>
+                {!isSidebarCollapsed && <div className="sidebar-section-title" style={{ marginTop: "8px" }}>Educator & Leadership</div>}
+
+                {isTeacherOrAdmin && (
+                  <button
+                    className="sidebar-nav-btn"
+                    onClick={() => setShowGradebookModal(true)}
+                    title="Teacher CAT Gradebook & Tutoring Impact"
+                  >
+                    <span>📈</span>
+                    {!isSidebarCollapsed && <span>CAT Gradebook</span>}
+                  </button>
+                )}
+
+                {isTutorOrHigher && (
+                  <button
+                    className={`sidebar-nav-btn ${navView === "training" ? "active" : ""}`}
+                    onClick={() => {
+                      setNavView("training");
+                      setStage("browse");
+                    }}
+                    title="Tutor Training Hub & Certification"
+                  >
+                    <span>🎓</span>
+                    {!isSidebarCollapsed && <span>Tutor Training</span>}
+                  </button>
+                )}
+
+                {isTeacherOrAdmin && (
+                  <>
+                    <button
+                      className={`sidebar-nav-btn ${navView === "teacher" ? "active" : ""}`}
+                      onClick={openTeacherView}
+                      title="Teacher Dashboard & Struggle Heatmap"
+                    >
+                      <span>🏫</span>
+                      {!isSidebarCollapsed && <span>Teacher Hub</span>}
+                    </button>
+
+                    <button
+                      className={`sidebar-nav-btn ${navView === "platform_admin" ? "active" : ""}`}
+                      onClick={() => {
+                        setNavView("platform_admin");
+                        loadPlatformAdminData();
+                      }}
+                      title="Platform Admin & Multi-School Health"
+                    >
+                      <span>🌐</span>
+                      {!isSidebarCollapsed && <span>School Admin</span>}
+                    </button>
+                  </>
+                )}
+              </>
+            )}
           </div>
 
           <div className="sidebar-bottom-icons">
+            {/* Field Tools Drawer Button */}
             <button
-              className="rail-icon-btn"
-              title={online ? `Online • Last sync: ${lastSync}` : `Offline • ${pending} queued`}
+              className="sidebar-nav-btn"
+              style={{ background: "#1e293b", color: "#34d399", border: "1px solid rgba(16, 185, 129, 0.2)" }}
+              onClick={() => setShowLabToolsDrawer(true)}
+              title="Open Lab & Field Operations Hub"
+            >
+              <span>🛠️</span>
+              {!isSidebarCollapsed && <span>Field Tools Hub</span>}
+            </button>
+
+            {/* Sync Status Badge */}
+            <div
+              className="sidebar-status-card"
+              style={{ cursor: "pointer" }}
               onClick={handleManualSync}
+              title={online ? `Online • Last sync: ${lastSync}. Click to force sync.` : `Offline • ${pending} queued in outbox. Click to retry.`}
             >
               <span className={`sidebar-status-dot ${online ? "online" : "offline"}`} />
-            </button>
+              {!isSidebarCollapsed && (
+                <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  <span style={{ fontWeight: 600, color: "#f8fafc", fontSize: "11px" }}>
+                    {online ? "Online Synced" : "Offline Outbox"}
+                  </span>
+                  <span style={{ fontSize: "10px", color: "#94a3b8" }}>
+                    {pending > 0 ? `${pending} queued • Click sync` : `Updated ${lastSync.slice(0, 8)}`}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </aside>
 
@@ -1404,23 +1463,51 @@ export default function App() {
                   ? "Tutor Verification Check"
                   : "Dashboard"}
               </h1>
-              <div className="dash-search-container">
+              <div
+                className="dash-search-container"
+                onClick={() => setShowCommandPalette(true)}
+                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}
+                title="Search topics, past papers, forums, or tools (Press Ctrl + K)"
+              >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search topics or tutors..."
+                  placeholder="Search topics, papers, forums... (Ctrl + K)"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="dash-search-input"
                 />
+                <kbd style={{ fontSize: "10px", background: "#e2e8f0", padding: "2px 5px", borderRadius: "4px", color: "#475569", border: "1px solid #cbd5e1", fontWeight: 700 }}>
+                  Ctrl K
+                </kbd>
               </div>
             </div>
 
             <div className="dash-user-controls">
-              {/* Phase 7: Language Switcher, Accessibility & Storage */}
+              {/* Consolidated Lab & Field Tools Hub Button */}
+              <button
+                className="lang-toggle-btn active"
+                style={{
+                  background: "#064e3b",
+                  color: "#34d399",
+                  border: "1px solid #059669",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontWeight: 700,
+                  boxShadow: "0 2px 6px rgba(16, 185, 129, 0.2)",
+                }}
+                onClick={() => setShowLabToolsDrawer(true)}
+                title="Open Lab & Field Operations Hub (QR, USSD, Diagnostics, Consent Slips, Donor Report)"
+              >
+                <span>🛠️</span>
+                <span>Field Tools</span>
+              </button>
+
+              {/* Language Switcher & Accessibility Controls */}
               <div className="a11y-toolbar">
                 <div style={{ display: "flex", gap: "2px", background: "#f1f5f9", padding: "2px", borderRadius: "20px" }}>
                   <button
@@ -1453,92 +1540,6 @@ export default function App() {
                   aria-pressed={lowDataMode}
                 >
                   📶 {lowDataMode ? "Low Data: ON" : t.lowDataMode}
-                </button>
-                {storageStats && (
-                  <button
-                    className="lang-toggle-btn"
-                    onClick={handleClearCache}
-                    title={`${storageStats.cachedLessonsCount} lesson packs cached (${storageStats.usageFormatted}). Click to clear storage (OFF-1).`}
-                  >
-                    🗑️ {storageStats.usageFormatted}
-                  </button>
-                )}
-                {/* Phase 8: Africa's Talking USSD & QR Transfer Quick Buttons */}
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowTelecomModal(true)}
-                  title="Launch Africa's Talking USSD (*384#) Feature Phone Simulator (Phase 8)"
-                >
-                  📟 *384# USSD
-                </button>
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowQRModal(true)}
-                  title="Zero-Data Offline QR Code Transfer Engine (Phase 8)"
-                >
-                  📱 QR Transfer
-                </button>
-                {/* Phase 11: Official Kenya DPA 2019 Parental Consent Slip */}
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => {
-                    setSelectedStudentForSlip({
-                      id: authSession?.user.id || "l1",
-                      fullName: authSession?.user.full_name || "Amani R. (Learner)",
-                      regNumber: authSession?.user.reg_number || "ADM-101",
-                      grade: authSession?.user.grade || 2,
-                      schoolName: "Alliance High School",
-                      schoolId: authSession?.user.school_id || "11111111-1111-1111-1111-111111111111",
-                    });
-                    setShowConsentSlipModal(true);
-                  }}
-                  title="Print or verify official Republic of Kenya DPA 2019 Parental Consent Slip"
-                >
-                  📋 Consent Slip
-                </button>
-                {/* Phase 13: Field Diagnostics & Donor Report Buttons */}
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowDiagnosticsModal(true)}
-                  title="Open Network Diagnostics & Outbox Inspector (Phase 13)"
-                >
-                  🩺 Diagnostics
-                </button>
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowDonorReportModal(true)}
-                  title="View Official Cryptographic Donor Impact Report (Phase 13)"
-                >
-                  📊 Donor Report
-                </button>
-                {/* Phase 14: School LMS Extension Quick Buttons */}
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowForumModal(true)}
-                  title="Subject Q&A & Peer Homework Forum (Phase 14)"
-                >
-                  💬 Q&A Forum
-                </button>
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowNoticeBoardModal(true)}
-                  title="School Notice Board & Academic Bulletin (Phase 14)"
-                >
-                  📢 Notices
-                </button>
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowGradebookModal(true)}
-                  title="Teacher CAT Gradebook & Tutoring Impact Engine (Phase 14)"
-                >
-                  📈 CAT Gradebook
-                </button>
-                <button
-                  className="lang-toggle-btn"
-                  onClick={() => setShowPastPaperModal(true)}
-                  title="KNEC KCSE & CBC Past Paper Repository (Phase 14)"
-                >
-                  📚 Past Papers
                 </button>
               </div>
 
@@ -2037,11 +2038,24 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Interactive Tutor Guiding Checklist */}
+                {/* Interactive Tutor Guiding Checklist with Progress Meter */}
                 <div className="tutor-interactive-checklist-box">
                   <div className="checklist-header">
-                    <span className="checklist-tag">TUTOR INTERACTIVE GUIDELINES</span>
-                    <span className="checklist-sub">Check off each pedagogical milestone as you progress:</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span className="checklist-tag">SOCRATIC PEDAGOGICAL MILESTONES</span>
+                      <span style={{ fontSize: "11px", color: "#047857", fontWeight: 700 }}>
+                        {Object.values(checkedSteps).filter(Boolean).length} / {lesson.tutorGuide.length} Completed
+                      </span>
+                    </div>
+                    <span className="checklist-sub">Check off each pedagogical milestone as you guide your peer:</span>
+                    <div className="checklist-progress-bar-wrap">
+                      <div
+                        className="checklist-progress-bar-fill"
+                        style={{
+                          width: `${lesson.tutorGuide.length > 0 ? (Object.values(checkedSteps).filter(Boolean).length / lesson.tutorGuide.length) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
                   </div>
                   <div className="checklist-items">
                     {lesson.tutorGuide.map((step, idx) => {
@@ -2076,12 +2090,18 @@ export default function App() {
                   </div>
 
                   <div className="lesson-box practice-box">
-                    <div className="box-tag">COLLABORATION WORKSPACE</div>
+                    <div className="box-tag">COLLABORATION WORKSPACE & SCRATCHPAD</div>
                     <p className="practice-note">
-                      Discuss the questions together. Have the learner explain their thought process before clicking to proceed.
+                      Discuss together. Write working steps, formulas, and notes in the scratchpad below:
                     </p>
+                    <textarea
+                      className="practice-scratchpad-area"
+                      placeholder="Collaborative Scratchpad: Tutor & learner write working steps, formulas, notes here (e.g. 2x² + 7x + 3 = 0)..."
+                      value={scratchpadNotes}
+                      onChange={(e) => setScratchpadNotes(e.target.value)}
+                    />
                     <div className="practice-hint-chip">
-                      <span>💡 Reminder: Praise effort, not just the correct answer.</span>
+                      <span>💡 Socratic Tip: Ask 'How did you arrive at that step?' before confirming answers.</span>
                     </div>
                   </div>
                 </div>
@@ -3899,6 +3919,48 @@ export default function App() {
           onClose={() => setShowPastPaperModal(false)}
         />
       )}
+
+      {/* Modern Consolidated Lab & Field Tools Hub Drawer */}
+      <LabToolsDrawer
+        isOpen={showLabToolsDrawer}
+        onClose={() => setShowLabToolsDrawer(false)}
+        onOpenQR={() => setShowQRModal(true)}
+        onOpenUSSD={() => setShowTelecomModal(true)}
+        onOpenDiagnostics={() => setShowDiagnosticsModal(true)}
+        onOpenConsentSlip={() => {
+          setSelectedStudentForSlip({
+            id: authSession?.user.id || "l1",
+            fullName: authSession?.user.full_name || "Amani R. (Learner)",
+            regNumber: authSession?.user.reg_number || "ADM-101",
+            grade: authSession?.user.grade || 2,
+            schoolName: "Alliance High School",
+            schoolId: authSession?.user.school_id || "11111111-1111-1111-1111-111111111111",
+          });
+          setShowConsentSlipModal(true);
+        }}
+        onOpenDonorReport={() => setShowDonorReportModal(true)}
+        onOpenStorageClear={handleClearCache}
+        storageUsageFormatted={storageStats?.usageFormatted}
+        pendingCount={pending + pendingEvents}
+        isOnline={online}
+      />
+
+      {/* Modern Global Quick Command Palette (Ctrl + K) */}
+      <CommandPaletteModal
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        topics={topics}
+        onSelectTopic={handleSelectTopic}
+        onNavigate={(view) => {
+          setNavView(view as any);
+          setStage("browse");
+        }}
+        onOpenTools={() => setShowLabToolsDrawer(true)}
+        onOpenForum={() => setShowForumModal(true)}
+        onOpenNotices={() => setShowNoticeBoardModal(true)}
+        onOpenGradebook={() => setShowGradebookModal(true)}
+        onOpenPastPapers={() => setShowPastPaperModal(true)}
+      />
     </div>
   );
 }
